@@ -29,6 +29,8 @@ export default function SnapshotDetail() {
   const navigate = useNavigate();
   const { detail, loading, fetchDetail, refreshSnapshot, clearDetail } = useQuarterlyStore();
 
+  const { pnlColorDark } = usePnlColor();
+
   useEffect(() => {
     if (snapshotId) {
       fetchDetail(snapshotId);
@@ -48,7 +50,6 @@ export default function SnapshotDetail() {
   }
 
   const snap = detail?.snapshot;
-  const { pnlColorDark } = usePnlColor();
   const pnlColor = pnlColorDark(snap?.total_pnl ?? 0);
 
   return (
