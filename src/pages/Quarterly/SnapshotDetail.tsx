@@ -16,6 +16,7 @@ import { useQuarterlyStore } from "../../stores/quarterlyStore";
 import SnapshotHoldingsTable from "./SnapshotHoldingsTable";
 import QuarterlyNotesEditor from "./QuarterlyNotesEditor";
 import HoldingChangesTable from "./HoldingChangesTable";
+import QuarterlyTransactionsSection from "./QuarterlyTransactionsSection";
 import { usePnlColor } from "../../hooks/usePnlColor";
 
 const { Title, Text } = Typography;
@@ -27,13 +28,22 @@ function fmt(val: number) {
 export default function SnapshotDetail() {
   const { snapshotId } = useParams<{ snapshotId: string }>();
   const navigate = useNavigate();
-  const { detail, loading, fetchDetail, refreshSnapshot, clearDetail } = useQuarterlyStore();
+  const {
+    detail,
+    loading,
+    quarterlyTransactions,
+    fetchDetail,
+    refreshSnapshot,
+    clearDetail,
+    fetchQuarterlyTransactions,
+  } = useQuarterlyStore();
 
   const { pnlColorDark } = usePnlColor();
 
   useEffect(() => {
     if (snapshotId) {
       fetchDetail(snapshotId);
+      fetchQuarterlyTransactions(snapshotId);
     }
     return () => clearDetail();
   }, [snapshotId]);
@@ -66,7 +76,12 @@ export default function SnapshotDetail() {
         </Space>
         <Button
           icon={<ReloadOutlined />}
-          onClick={() => snapshotId && refreshSnapshot(snapshotId)}
+          onClick={() => {
+            if (snapshotId) {
+              refreshSnapshot(snapshotId);
+              fetchQuarterlyTransactions(snapshotId);
+            }
+          }}
           loading={loading}
           size="small"
         >
@@ -173,6 +188,11 @@ export default function SnapshotDetail() {
           <Divider />
         </>
       )}
+
+      {/* Quarterly Transactions */}
+      <QuarterlyTransactionsSection groups={quarterlyTransactions} loading={loading} />
+
+      <Divider />
 
       {/* Holdings Table */}
       {snapshotId && (
