@@ -2,6 +2,7 @@ import { Card, Table, Tag, Typography } from "antd";
 import { SwapOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { StockTransactionGroup, Transaction } from "../../types";
+import { useAccountStore } from "../../stores/accountStore";
 
 const { Text } = Typography;
 
@@ -20,7 +21,16 @@ function fmt(v: number, decimals = 2) {
 
 /** Expanded view: individual transactions for one stock within the quarter. */
 function TransactionDetailTable({ transactions }: { transactions: Transaction[] }) {
+  const { accounts } = useAccountStore();
+  const accountNameById = Object.fromEntries(accounts.map((a) => [a.id, a.name]));
+
   const columns = [
+    {
+      title: "账户",
+      dataIndex: "account_id",
+      key: "account_id",
+      render: (id: string) => accountNameById[id] ?? id,
+    },
     {
       title: "日期",
       dataIndex: "traded_at",
