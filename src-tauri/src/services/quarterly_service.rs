@@ -1473,13 +1473,16 @@ pub fn get_quarterly_transactions(
     let end_exclusive = end.succ_opt().unwrap_or(end);
     let end_str = end_exclusive.format("%Y-%m-%d").to_string();
 
-    // Fetch all non-OPEN transactions in the quarter date range, ordered by date
+    // Fetch all real transactions in the quarter date range, ordered by date.
+    // Exclude OPEN-type records (initial position entries) and backfill imports
+    // (notes = 'backfill:initial') which are also synthetic rather than real trades.
     let mut stmt = conn
         .prepare(
             "SELECT id, holding_id, account_id, symbol, name, market, transaction_type,
                     shares, price, total_amount, commission, currency, traded_at, notes, created_at
              FROM transactions
              WHERE transaction_type != 'OPEN'
+               AND (notes IS NULL OR notes != 'backfill:initial')
                AND traded_at >= ?1
                AND traded_at < ?2
              ORDER BY symbol ASC, traded_at ASC",
