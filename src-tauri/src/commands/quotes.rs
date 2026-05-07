@@ -70,11 +70,14 @@ pub async fn get_holding_quotes(
         //   realized_pnl = SUM(SELL total_amount - commission) - SUM(BUY total_amount + commission)
         //   total_buy_cost = SUM(BUY total_amount + commission)  [used for % calculation]
         // OPEN transactions are excluded (no cash impact).
+        let is_cleared_position = |h: &crate::models::Holding| -> bool {
+            h.shares == 0.0 && !h.symbol.starts_with(CASH_SYMBOL_PREFIX)
+        };
         let mut realized_pnl_map: std::collections::HashMap<String, (f64, f64)> =
             std::collections::HashMap::new();
         for h in &holdings {
-            if h.shares == 0.0 && !h.symbol.starts_with(CASH_SYMBOL_PREFIX) {
-                let pnl_data: (f64, f64) = conn
+            if is_cleared_position(h) {
+                let pnl_data: (f64, f64) = match conn
                     .query_row(
                         "SELECT
                             COALESCE(SUM(CASE
@@ -89,8 +92,13 @@ pub async fn get_holding_quotes(
                          FROM transactions WHERE holding_id = ?1",
                         rusqlite::params![h.id],
                         |row| Ok((row.get(0)?, row.get(1)?)),
-                    )
-                    .unwrap_or((0.0, 0.0));
+                    ) {
+                    Ok(data) => data,
+                    Err(e) => {
+                        eprintln!("Failed to compute realized PnL for holding {}: {}", h.id, e);
+                        (0.0, 0.0)
+                    }
+                };
                 realized_pnl_map.insert(h.id.clone(), pnl_data);
             }
         }
@@ -148,8 +156,8 @@ pub async fn get_holding_quotes(
         .into_iter()
         .map(|h| {
             let quote = quote_map.get(&h.symbol).cloned();
-            let is_cleared = h.shares == 0.0 && !h.symbol.starts_with(CASH_SYMBOL_PREFIX);
-            let (market_value, total_cost, unrealized_pnl, unrealized_pnl_percent) = if is_cleared {
+            let cleared = h.shares == 0.0 && !h.symbol.starts_with(CASH_SYMBOL_PREFIX);
+            let (market_value, total_cost, unrealized_pnl, unrealized_pnl_percent) = if cleared {
                 // Cleared position: report realized PnL from transaction history.
                 let (realized_pnl, total_buy_cost) =
                     realized_pnl_map.get(&h.id).copied().unwrap_or((0.0, 0.0));

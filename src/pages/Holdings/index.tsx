@@ -44,6 +44,11 @@ function isCashSymbol(symbol: string): boolean {
   return symbol.startsWith(CASH_SYMBOL_PREFIX);
 }
 
+/** Returns true if a holding is a fully-cleared (fully-sold) stock position. */
+function isClearedPosition(holding: { symbol: string; shares: number }): boolean {
+  return !isCashSymbol(holding.symbol) && holding.shares === 0;
+}
+
 /** Shared formatting options for displaying currency amounts. */
 const CURRENCY_FORMAT_OPTIONS: Intl.NumberFormatOptions = {
   minimumFractionDigits: 2,
@@ -328,7 +333,7 @@ export default function HoldingsPage() {
     if (filterMarket && h.market !== filterMarket) return false;
     if (showCleared) {
       // Show only cleared (fully-sold) non-cash positions
-      return !isCashSymbol(h.symbol) && h.shares === 0;
+      return isClearedPosition(h);
     } else {
       // Show active positions (shares > 0); cash is always active
       return isCashSymbol(h.symbol) || h.shares > 0;
@@ -456,7 +461,7 @@ export default function HoldingsPage() {
       sorter: (a: HoldingWithQuote, b: HoldingWithQuote) =>
         (a.unrealized_pnl ?? 0) - (b.unrealized_pnl ?? 0),
       render: (_: unknown, record: HoldingWithQuote) => {
-        const isCleared = !isCashSymbol(record.symbol) && record.shares === 0;
+        const isCleared = isClearedPosition(record);
         return (
           <span>
             <PnlText value={record.unrealized_pnl ?? null} percent={record.unrealized_pnl_percent ?? null} />
@@ -610,7 +615,7 @@ export default function HoldingsPage() {
       {/* Cleared positions peek button */}
       {(() => {
         const clearedCount = allDisplayData.filter(
-          (h) => !isCashSymbol(h.symbol) && h.shares === 0 &&
+          (h) => isClearedPosition(h) &&
             (!filterAccountId || h.account_id === filterAccountId) &&
             (!filterMarket || h.market === filterMarket)
         ).length;
@@ -623,6 +628,10 @@ export default function HoldingsPage() {
               onMouseDown={() => setShowCleared(true)}
               onMouseUp={() => setShowCleared(false)}
               onMouseLeave={() => setShowCleared(false)}
+              onTouchStart={() => setShowCleared(true)}
+              onTouchEnd={() => setShowCleared(false)}
+              onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setShowCleared(true); } }}
+              onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") setShowCleared(false); }}
             >
               查看已清仓股票（{clearedCount}）
             </Button>
