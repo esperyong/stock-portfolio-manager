@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Button, Select, Space, Table, Tag, Typography } from "antd";
-import { EditOutlined, HistoryOutlined } from "@ant-design/icons";
+import { EditOutlined, FilterFilled, HistoryOutlined } from "@ant-design/icons";
 import type { QuarterlyHoldingSnapshot, QuarterlySnapshot } from "../../types";
 import HoldingNotesEditor from "./HoldingNotesEditor";
 import { usePnlColor } from "../../hooks/usePnlColor";
@@ -116,10 +116,25 @@ export default function SnapshotHoldingsTable({ holdings, snapshotId, loading, s
 
   const columns = [
     {
-      title: "市场",
+      title: (
+        <Space size={4}>
+          市场
+          {filterMarket && <FilterFilled style={{ color: "#1677ff", fontSize: 12 }} />}
+        </Space>
+      ),
       dataIndex: "market",
       key: "market",
       render: (m: string) => <Tag>{MARKET_LABELS[m] ?? m}</Tag>,
+    },
+    {
+      title: (
+        <Space size={4}>
+          账户
+          {filterAccountId && <FilterFilled style={{ color: "#1677ff", fontSize: 12 }} />}
+        </Space>
+      ),
+      dataIndex: "account_name",
+      key: "account_name",
     },
     {
       title: "代码",
@@ -139,11 +154,6 @@ export default function SnapshotHoldingsTable({ holdings, snapshotId, loading, s
       render: (name: string, record: QuarterlyHoldingSnapshot) => (
         <Tag color={record.category_color}>{name}</Tag>
       ),
-    },
-    {
-      title: "账户",
-      dataIndex: "account_name",
-      key: "account_name",
     },
     {
       title: "持股数",
