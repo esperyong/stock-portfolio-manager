@@ -50,7 +50,7 @@ const indentCommand: ICommand = {
     <svg width="12" height="12" viewBox="0 0 24 24">
       <path
         fill="currentColor"
-        d="M3 21h18v-2H3v2zm8-4h10v-2H11v2zm-8-4h18v-2H3v2zm8-4h10V7H11v2zM3 3v2h18V3H3zm8 8l5-5-5-5v10z"
+        d="M3 8v8l6-4-6-4zM11 4h10v3H11zM14 11h7v3h-7zM11 17h10v3H11z"
       />
     </svg>
   ),
@@ -78,7 +78,7 @@ const unindentCommand: ICommand = {
     <svg width="12" height="12" viewBox="0 0 24 24">
       <path
         fill="currentColor"
-        d="M11 17h10v-2H11v2zm-8-5l5 5V7l-5 5zm0 9h18v-2H3v2zM3 3v2h18V3H3zm8 4h10V5H11v2zm0 4h10v-2H11v2z"
+        d="M8 8v8L2 12zM11 4h10v3H11zM14 11h7v3h-7zM11 17h10v3H11z"
       />
     </svg>
   ),
@@ -98,7 +98,15 @@ const unindentCommand: ICommand = {
   },
 };
 
-const TOOLBAR_COMMANDS = [...commands.getCommands(), commands.divider, indentCommand, unindentCommand];
+// getCommands() ends with [..., divider, help]; insert indent/unindent before help
+const BASE_COMMANDS = commands.getCommands();
+const TOOLBAR_COMMANDS = [
+  ...BASE_COMMANDS.slice(0, -2),
+  commands.divider,
+  indentCommand,
+  unindentCommand,
+  commands.help,
+];
 
 export default function QuarterlyNotesEditor({ snapshotId, initialNotes }: Props) {
   const { updateQuarterlyNotes } = useQuarterlyStore();
