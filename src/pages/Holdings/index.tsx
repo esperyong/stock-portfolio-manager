@@ -44,6 +44,11 @@ function isCashSymbol(symbol: string): boolean {
   return symbol.startsWith(CASH_SYMBOL_PREFIX);
 }
 
+/** Returns true if a holding is a fully-cleared (fully-sold) stock position. */
+function isClearedPosition(holding: { symbol: string; shares: number }): boolean {
+  return !isCashSymbol(holding.symbol) && holding.shares === 0;
+}
+
 /** Shared formatting options for displaying currency amounts. */
 const CURRENCY_FORMAT_OPTIONS: Intl.NumberFormatOptions = {
   minimumFractionDigits: 2,
@@ -88,6 +93,7 @@ export default function HoldingsPage() {
   const [detailTransactions, setDetailTransactions] = useState<Transaction[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [showRealtime, setShowRealtime] = useState(true);
+  const [showCleared, setShowCleared] = useState(false);
   const [form] = Form.useForm();
   const [cashForm] = Form.useForm();
   const [fetchingName, setFetchingName] = useState(false);
@@ -325,7 +331,13 @@ export default function HoldingsPage() {
   const displayData = allDisplayData.filter((h) => {
     if (filterAccountId && h.account_id !== filterAccountId) return false;
     if (filterMarket && h.market !== filterMarket) return false;
-    return true;
+    if (showCleared) {
+      // Show only cleared (fully-sold) non-cash positions
+      return isClearedPosition(h);
+    } else {
+      // Show active positions (shares > 0); cash is always active
+      return isCashSymbol(h.symbol) || h.shares > 0;
+    }
   });
   displayDataRef.current = displayData;
 
@@ -448,9 +460,17 @@ export default function HoldingsPage() {
       key: "unrealized_pnl",
       sorter: (a: HoldingWithQuote, b: HoldingWithQuote) =>
         (a.unrealized_pnl ?? 0) - (b.unrealized_pnl ?? 0),
-      render: (_: unknown, record: HoldingWithQuote) => (
-        <PnlText value={record.unrealized_pnl ?? null} percent={record.unrealized_pnl_percent ?? null} />
-      ),
+      render: (_: unknown, record: HoldingWithQuote) => {
+        const isCleared = isClearedPosition(record);
+        return (
+          <span>
+            <PnlText value={record.unrealized_pnl ?? null} percent={record.unrealized_pnl_percent ?? null} />
+            {isCleared && (
+              <Tag color="default" style={{ marginLeft: 4, fontSize: 11 }}>已实现</Tag>
+            )}
+          </span>
+        );
+      },
     },
   ];
 
@@ -583,14 +603,39 @@ export default function HoldingsPage() {
         </Space>
       </div>
 
-      <Table
-        dataSource={displayData}
-        columns={columns}
-        rowKey="id"
-        loading={holdingsLoading}
-        pagination={{ pageSize: 20 }}
-        scroll={{ x: showRealtime ? 1200 : undefined }}
-      />
+      {(() => {
+        const PAGE_SIZE = 20;
+        const clearedCount = allDisplayData.filter(
+          (h) => isClearedPosition(h) &&
+            (!filterAccountId || h.account_id === filterAccountId) &&
+            (!filterMarket || h.market === filterMarket)
+        ).length;
+        return (
+          <>
+            <Table
+              dataSource={displayData}
+              columns={columns}
+              rowKey="id"
+              loading={holdingsLoading}
+              pagination={displayData.length > PAGE_SIZE ? { pageSize: PAGE_SIZE } : false}
+              scroll={{ x: showRealtime ? 1200 : undefined }}
+            />
+
+            {/* Cleared positions toggle button */}
+            {clearedCount > 0 && (
+              <div className="mt-2">
+                <Button
+                  size="small"
+                  type={showCleared ? "primary" : "default"}
+                  onClick={() => setShowCleared(!showCleared)}
+                >
+                  查看已清仓股票（{clearedCount}）
+                </Button>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       <Modal
         title={editingHolding ? "编辑持仓" : "新增持仓"}
