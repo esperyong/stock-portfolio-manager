@@ -603,39 +603,37 @@ export default function HoldingsPage() {
         </Space>
       </div>
 
-      <Table
-        dataSource={displayData}
-        columns={columns}
-        rowKey="id"
-        loading={holdingsLoading}
-        pagination={{ pageSize: 20 }}
-        scroll={{ x: showRealtime ? 1200 : undefined }}
-      />
-
-      {/* Cleared positions peek button */}
       {(() => {
+        const PAGE_SIZE = 20;
         const clearedCount = allDisplayData.filter(
           (h) => isClearedPosition(h) &&
             (!filterAccountId || h.account_id === filterAccountId) &&
             (!filterMarket || h.market === filterMarket)
         ).length;
-        if (clearedCount === 0) return null;
         return (
-          <div className="mt-2">
-            <Button
-              size="small"
-              type={showCleared ? "primary" : "default"}
-              onMouseDown={() => setShowCleared(true)}
-              onMouseUp={() => setShowCleared(false)}
-              onMouseLeave={() => setShowCleared(false)}
-              onTouchStart={() => setShowCleared(true)}
-              onTouchEnd={() => setShowCleared(false)}
-              onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setShowCleared(true); } }}
-              onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") setShowCleared(false); }}
-            >
-              查看已清仓股票（{clearedCount}）
-            </Button>
-          </div>
+          <>
+            <Table
+              dataSource={displayData}
+              columns={columns}
+              rowKey="id"
+              loading={holdingsLoading}
+              pagination={displayData.length > PAGE_SIZE ? { pageSize: PAGE_SIZE } : false}
+              scroll={{ x: showRealtime ? 1200 : undefined }}
+            />
+
+            {/* Cleared positions toggle button */}
+            {clearedCount > 0 && (
+              <div className="mt-2">
+                <Button
+                  size="small"
+                  type={showCleared ? "primary" : "default"}
+                  onClick={() => setShowCleared(!showCleared)}
+                >
+                  查看已清仓股票（{clearedCount}）
+                </Button>
+              </div>
+            )}
+          </>
         );
       })()}
 
