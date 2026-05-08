@@ -229,6 +229,8 @@ pub fn run() {
             commands::ocr::parse_trade_image,
             commands::ocr::lookup_cn_stock_code,
             commands::ocr::lookup_stock_name_by_symbol,
+            // Excel: import trades from 同花顺 Excel export
+            commands::excel_import::parse_ths_excel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

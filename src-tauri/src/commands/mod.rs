@@ -3,6 +3,7 @@ pub mod ai;
 pub mod alerts;
 pub mod categories;
 pub mod dashboard;
+pub mod excel_import;
 pub mod exchange_rates;
 pub mod holdings;
 pub mod import_export;
