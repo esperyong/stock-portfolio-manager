@@ -334,16 +334,16 @@ export default function TransactionsPage() {
               return (
                 <>
                   <Button
-                    icon={<CameraOutlined />}
-                    onClick={() => setImportModalOpen(true)}
-                  >
-                    从截图导入
-                  </Button>
-                  <Button
                     icon={<FileTextOutlined />}
                     onClick={() => setExcelImportModalOpen(true)}
                   >
                     从CSV导入
+                  </Button>
+                  <Button
+                    icon={<CameraOutlined />}
+                    onClick={() => setImportModalOpen(true)}
+                  >
+                    从截图导入
                   </Button>
                 </>
               );
