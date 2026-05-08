@@ -22,27 +22,23 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Account } from "../../types";
 
 const { Dragger } = Upload;
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface ThsExcelRow {
-  transaction_type: string;
+interface EditableRow {
+  key: string;
+  selected: boolean;
+  transaction_type: string; // "BUY" | "SELL"
   symbol: string;
   stock_name: string;
-  traded_at: string;
+  traded_at: string; // ISO-8601
   price: number;
   shares: number;
   total_amount: number;
   commission: number;
-  exchange: string;
-}
-
-interface EditableRow extends ThsExcelRow {
-  key: string;
-  selected: boolean;
   lookingUp?: boolean;
   importOk?: boolean;
   importError?: string;
@@ -54,7 +50,7 @@ interface ImportResult {
   errors: { name: string; error: string }[];
 }
 
-interface ImportFromThsExcelModalProps {
+interface ImportFromThsCsvModalProps {
   open: boolean;
   account: Account;
   onClose: () => void;
@@ -62,15 +58,198 @@ interface ImportFromThsExcelModalProps {
 }
 
 // ---------------------------------------------------------------------------
+// CSV parsing helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Split a single CSV line respecting double-quoted fields.
+ */
+function splitCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      result.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseNum(s: string | undefined): number {
+  return parseFloat((s ?? "").replace(/,/g, "").trim());
+}
+
+/**
+ * Build an ISO-8601 datetime string from THS date/time fields.
+ *   date: "20260430" or "2026/04/30" or "2026-04-30"
+ *   time: "14:13:09" or "141309" or "" (defaults to 09:30:00)
+ */
+function buildDateTime(date: string, time: string): string {
+  const d = date.trim().replace(/[\/\-]/g, "");
+  const datePart =
+    d.length === 8
+      ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+      : date.trim();
+
+  const t = time.trim().replace(/:/g, "");
+  const timePart =
+    t.length === 6
+      ? `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}`
+      : time.trim() || "09:30:00";
+
+  return `${datePart}T${timePart}`;
+}
+
+/**
+ * Derive the SH/SZ-prefixed symbol from the 6-digit code and optional
+ * exchange name column.
+ */
+function deriveSymbol(code: string, exchange: string): string {
+  const c = code.trim();
+  if (exchange.includes("上海") || exchange.toUpperCase().includes("SH")) {
+    return `SH${c}`;
+  }
+  if (exchange.includes("深圳") || exchange.toUpperCase().includes("SZ")) {
+    return `SZ${c}`;
+  }
+  // Heuristic: Shanghai A-shares begin with 6; Shenzhen with 0 or 3
+  return c.startsWith("6") ? `SH${c}` : `SZ${c}`;
+}
+
+/**
+ * Parse a 同花顺 historical-trade CSV export.
+ *
+ * Recognised columns (THS saves them in GB18030; the component retries with
+ * that encoding when UTF-8 yields no header):
+ *   成交日期  成交时间  证券代码  证券名称  交易所名称
+ *   成交价格  成交数量  成交金额  发生金额
+ *   手续费  印花税  附加费  过户费
+ *
+ * Commission is aggregated: 手续费 + 印花税 + 附加费 + 过户费.
+ * Transaction type is inferred from 发生金额 sign: negative → BUY, positive → SELL.
+ */
+function parseThsCsv(text: string): EditableRow[] {
+  // Strip UTF-8 BOM
+  const stripped = text.startsWith("\uFEFF") ? text.slice(1) : text;
+  const lines = stripped.split(/\r?\n/);
+
+  // Find header row: must contain 证券代码
+  let headerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("证券代码")) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) return [];
+
+  const headers = splitCsvLine(lines[headerIdx]).map((h) => h.trim());
+  const col = (name: string) => headers.indexOf(name);
+
+  const iDate = col("成交日期") !== -1 ? col("成交日期") : col("交易日期");
+  const iTime = col("成交时间");
+  const iCode = col("证券代码");
+  const iName = col("证券名称");
+  const iExchange = col("交易所名称");
+  const iPrice = col("成交价格");
+  const iShares = col("成交数量");
+  const iAmount = col("成交金额");
+  const iHappen = col("发生金额");
+  const iCommission = col("手续费");
+  const iStamp = col("印花税");
+  const iExtra = col("附加费");
+  const iTransfer = col("过户费");
+
+  if (iCode === -1 || iShares === -1) return [];
+
+  const rows: EditableRow[] = [];
+  let idx = 0;
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+
+    const cols = splitCsvLine(line);
+    const get = (j: number) => (j !== -1 ? cols[j] ?? "" : "");
+
+    const code = get(iCode).trim();
+    // Skip rows without a valid 6-digit numeric code
+    if (!/^\d{6}$/.test(code)) continue;
+
+    const shares = parseNum(get(iShares));
+    if (isNaN(shares) || shares === 0) continue;
+
+    const price = parseNum(get(iPrice));
+    const tradeAmount = parseNum(get(iAmount));
+    const happenAmt = parseNum(get(iHappen));
+
+    const total_amount = isNaN(tradeAmount) || tradeAmount === 0
+      ? Math.round(Math.abs(price) * Math.abs(shares) * 100) / 100
+      : Math.abs(tradeAmount);
+
+    // Commission = sum of the four fee columns
+    const commission = Math.round(
+      (
+        (isNaN(parseNum(get(iCommission))) ? 0 : Math.abs(parseNum(get(iCommission)))) +
+        (isNaN(parseNum(get(iStamp))) ? 0 : Math.abs(parseNum(get(iStamp)))) +
+        (isNaN(parseNum(get(iExtra))) ? 0 : Math.abs(parseNum(get(iExtra)))) +
+        (isNaN(parseNum(get(iTransfer))) ? 0 : Math.abs(parseNum(get(iTransfer))))
+      ) * 100
+    ) / 100;
+
+    // Transaction type from 发生金额 sign
+    const transaction_type =
+      !isNaN(happenAmt) && happenAmt > 0 ? "SELL" : "BUY";
+
+    const exchange = get(iExchange);
+    const symbol = deriveSymbol(code, exchange);
+    const stock_name = get(iName).trim();
+
+    const date = get(iDate);
+    const time = get(iTime);
+    const traded_at = buildDateTime(date, time);
+
+    rows.push({
+      key: String(idx++),
+      selected: true,
+      transaction_type,
+      symbol,
+      stock_name: stock_name || symbol,
+      traded_at,
+      price: Math.abs(price),
+      shares: Math.abs(shares),
+      total_amount,
+      commission,
+    });
+  }
+
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function ImportFromThsExcelModal({
+export default function ImportFromThsCsvModal({
   open,
   account,
   onClose,
   onImported,
-}: ImportFromThsExcelModalProps) {
+}: ImportFromThsCsvModalProps) {
   const [step, setStep] = useState(0);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [rows, setRows] = useState<EditableRow[]>([]);
@@ -90,7 +269,6 @@ export default function ImportFromThsExcelModal({
   // ---- Name resolution ---------------------------------------------------------
 
   const resolveStockNames = useCallback(async (parsedRows: EditableRow[]) => {
-    // First build a name map from already-held symbols
     const holdingNameMap = new Map<string, string>();
     try {
       const holdings = await invoke<{ symbol: string; name: string }[]>("get_holdings", {
@@ -103,13 +281,12 @@ export default function ImportFromThsExcelModal({
       // ignore
     }
 
-    // Fill in names from holdings; for the rest, call the backend lookup
     const uniqueSymbols = [...new Set(parsedRows.map((r) => r.symbol.toUpperCase()))];
     const symbolNameMap = new Map<string, string>();
 
     for (const sym of uniqueSymbols) {
-      const holdingName = holdingNameMap.get(sym);
-      if (holdingName) symbolNameMap.set(sym, holdingName);
+      const name = holdingNameMap.get(sym);
+      if (name) symbolNameMap.set(sym, name);
     }
 
     const needLookup = uniqueSymbols.filter((s) => !symbolNameMap.has(s));
@@ -119,7 +296,7 @@ export default function ImportFromThsExcelModal({
           const name = await invoke<string | null>("lookup_stock_name_by_symbol", { symbol: sym });
           if (name) symbolNameMap.set(sym, name);
         } catch {
-          // ignore individual failures; user can edit manually
+          // ignore; user can edit manually
         }
       })
     );
@@ -127,56 +304,54 @@ export default function ImportFromThsExcelModal({
     setRows((prev) =>
       prev.map((r) => {
         const resolved = symbolNameMap.get(r.symbol.toUpperCase());
-        // Prefer resolved name; keep the Excel name if no better name found
-        const finalName = resolved ?? r.stock_name;
-        return { ...r, stock_name: finalName || r.symbol, lookingUp: false };
+        return { ...r, stock_name: resolved ?? r.stock_name, lookingUp: false };
       })
     );
   }, []);
 
   // ---- Upload handler ----------------------------------------------------------
 
+  const attemptParse = useCallback(
+    (text: string) => {
+      const parsed = parseThsCsv(text);
+      if (parsed.length === 0) return false;
+      const withLoading = parsed.map((r) => ({ ...r, lookingUp: true }));
+      setRows(withLoading);
+      setStep(1);
+      resolveStockNames(withLoading);
+      return true;
+    },
+    [resolveStockNames]
+  );
+
   const handleBeforeUpload = useCallback(
     (file: File) => {
       setParseError("");
 
+      // Try UTF-8 first; retry with GB18030 if header not found
       const reader = new FileReader();
-      reader.onload = async (e) => {
-        const arrayBuffer = e.target?.result as ArrayBuffer;
-        const bytes = new Uint8Array(arrayBuffer);
+      reader.onload = (e) => {
+        const textUtf8 = e.target?.result as string;
+        if (attemptParse(textUtf8)) return;
 
-        // Encode to Base64 to send to Rust backend
-        let binary = "";
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const fileBase64 = btoa(binary);
-
-        try {
-          const parsed = await invoke<ThsExcelRow[]>("parse_ths_excel", { fileBase64 });
-          if (parsed.length === 0) {
-            setParseError("未从 Excel 中识别到有效的成交记录，请确认文件为同花顺导出的历史成交 Excel。");
-            return;
+        // Retry with GB18030 (THS sometimes saves in this encoding)
+        const reader2 = new FileReader();
+        reader2.onload = (e2) => {
+          const textGb = e2.target?.result as string;
+          if (!attemptParse(textGb)) {
+            setParseError(
+              "未从 CSV 中识别到交易记录。请确认文件为同花顺导出的历史成交 CSV，且包含「证券代码」列标题行。"
+            );
           }
-          const editableRows: EditableRow[] = parsed.map((r, idx) => ({
-            ...r,
-            key: String(idx),
-            selected: true,
-            lookingUp: r.stock_name === "" || r.stock_name === r.symbol,
-          }));
-          setRows(editableRows);
-          setStep(1);
-          resolveStockNames(editableRows);
-        } catch (err) {
-          setParseError(`解析 Excel 失败: ${err}`);
-        }
+        };
+        reader2.readAsText(file, "GB18030");
       };
-      reader.readAsArrayBuffer(file);
+      reader.readAsText(file, "utf-8");
 
       setFileList([file as unknown as UploadFile]);
       return false; // prevent antd auto-upload
     },
-    [resolveStockNames]
+    [attemptParse]
   );
 
   // ---- Import handler ----------------------------------------------------------
@@ -192,7 +367,7 @@ export default function ImportFromThsExcelModal({
     let success = 0;
     const errors: { name: string; error: string }[] = [];
 
-    // Import in chronological order to ensure correct avg-cost calculation
+    // Import in chronological order for correct avg-cost calculation
     const sorted = [...selected].sort((a, b) => a.traded_at.localeCompare(b.traded_at));
 
     for (const r of sorted) {
@@ -434,36 +609,49 @@ export default function ImportFromThsExcelModal({
 
   return (
     <Modal
-      title={`从同花顺 Excel 导入交易记录（A股）`}
+      title="从同花顺历史成交 CSV 导入交易记录（A股）"
       open={open}
       onCancel={handleClose}
       footer={footer}
-      width={step === 1 ? 1020 : 520}
+      width={step === 1 ? 1020 : 560}
       destroyOnClose
     >
       <Steps
         current={step}
-        items={[{ title: "上传 Excel" }, { title: "核对数据" }, { title: "导入结果" }]}
+        items={[{ title: "上传 CSV" }, { title: "核对数据" }, { title: "导入结果" }]}
         className="mb-4"
       />
 
       {/* ---- Step 0: Upload ---- */}
       {step === 0 && (
         <div>
+          <Alert
+            type="info"
+            showIcon
+            className="mb-3"
+            message="如何导出 CSV"
+            description={
+              <Paragraph className="!mb-0" style={{ fontSize: 13 }}>
+                同花顺客户端导出的历史成交文件为 Excel 格式，请先用 WPS 表格、Microsoft
+                Excel 或 macOS Numbers 打开，然后另存为 <strong>CSV（逗号分隔）</strong>
+                格式，再上传到此处。程序将自动识别以下列：
+                成交日期、成交时间、证券代码、证券名称、交易所名称、成交价格、成交数量、成交金额、发生金额、手续费、印花税、附加费、过户费。
+                手续费将自动汇总（手续费 + 印花税 + 附加费 + 过户费）。
+              </Paragraph>
+            }
+          />
           <Dragger
             fileList={fileList}
             beforeUpload={handleBeforeUpload}
-            accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".csv,text/csv"
             maxCount={1}
             showUploadList={false}
           >
             <p className="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p className="ant-upload-text">点击或拖拽同花顺历史成交 Excel 到此处</p>
-            <p className="ant-upload-hint">
-              支持 .xls 和 .xlsx 格式。手续费将自动汇总（手续费 + 印花税 + 附加费 + 过户费）。
-            </p>
+            <p className="ant-upload-text">点击或拖拽同花顺历史成交 CSV 到此处</p>
+            <p className="ant-upload-hint">支持 UTF-8 及 GB18030 编码，.csv 格式</p>
           </Dragger>
           {parseError && (
             <Alert type="error" message={parseError} className="mt-3" showIcon />
