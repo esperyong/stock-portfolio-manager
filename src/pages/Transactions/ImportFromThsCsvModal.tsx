@@ -136,7 +136,7 @@ function deriveSymbol(code: string, exchange: string): string {
  * Recognised columns (THS saves them in GB18030; the component retries with
  * that encoding when UTF-8 yields no header):
  *   成交日期  成交时间  证券代码  证券名称  交易所名称
- *   成交价格  成交数量  成交金额  发生金额
+ *   成交价格（或成交均价）  成交数量  成交金额  发生金额
  *   手续费  印花税  附加费  过户费
  *
  * Commission is aggregated: 手续费 + 印花税 + 附加费 + 过户费.
@@ -165,7 +165,7 @@ function parseThsCsv(text: string): EditableRow[] {
   const iCode = col("证券代码");
   const iName = col("证券名称");
   const iExchange = col("交易所名称");
-  const iPrice = col("成交价格");
+  const iPrice = (() => { const i = col("成交价格"); return i !== -1 ? i : col("成交均价"); })();
   const iShares = col("成交数量");
   const iAmount = col("成交金额");
   const iHappen = col("发生金额");
@@ -637,7 +637,7 @@ export default function ImportFromThsCsvModal({
                 同花顺客户端导出的历史成交文件为 Excel 格式，请先用 WPS 表格、Microsoft
                 Excel 或 macOS Numbers 打开，然后另存为 <strong>CSV（逗号分隔）</strong>
                 格式，再上传到此处。程序将自动识别以下列：
-                成交日期、成交时间、证券代码、证券名称、交易所名称、成交价格、成交数量、成交金额、发生金额、手续费、印花税、附加费、过户费。
+                成交日期、成交时间、证券代码、证券名称、交易所名称、成交价格（或成交均价）、成交数量、成交金额、发生金额、手续费、印花税、附加费、过户费。
                 手续费将自动汇总（手续费 + 印花税 + 附加费 + 过户费）。
               </Paragraph>
             }
