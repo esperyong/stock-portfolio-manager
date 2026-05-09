@@ -136,7 +136,7 @@ function deriveSymbol(code: string, exchange: string): string {
  *
  * Recognised columns (THS saves them in GB18030; the component retries with
  * that encoding when UTF-8 yields no header):
- *   成交日期  成交时间  证券代码  证券名称  交易所名称
+ *   成交日期  成交时间  证券代码  证券名称  交易所名称（或交易市场）
  *   成交价格（或成交均价）  成交数量  成交金额  发生金额
  *   手续费  印花税  附加费  过户费
  *
@@ -165,8 +165,8 @@ function parseThsCsv(text: string): EditableRow[] {
   const iTime = col("成交时间");
   const iCode = col("证券代码");
   const iName = col("证券名称");
-  const iExchange = col("交易所名称");
-  const iPrice = (() => { const i = col("成交价格"); return i !== -1 ? i : col("成交均价"); })();
+  const iExchange = col("交易所名称") !== -1 ? col("交易所名称") : col("交易市场");
+  const iPrice = col("成交价格") !== -1 ? col("成交价格") : col("成交均价");
   const iShares = col("成交数量");
   const iAmount = col("成交金额");
   const iHappen = col("发生金额");
