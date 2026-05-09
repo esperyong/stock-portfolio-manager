@@ -126,8 +126,9 @@ function deriveSymbol(code: string, exchange: string): string {
   if (exchange.includes("深圳") || exchange.toUpperCase().includes("SZ")) {
     return `sz${c}`;
   }
-  // Heuristic: Shanghai A-shares begin with 6; Shenzhen with 0 or 3
-  return c.startsWith("6") ? `sh${c}` : `sz${c}`;
+  // Heuristic: Shanghai codes begin with 5 (ETFs/funds) or 6 (A-shares);
+  // Shenzhen codes begin with 0, 1, 2, 3, or 4.
+  return c.startsWith("6") || c.startsWith("5") ? `sh${c}` : `sz${c}`;
 }
 
 /**
