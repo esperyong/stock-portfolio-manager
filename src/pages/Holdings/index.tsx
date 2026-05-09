@@ -23,6 +23,7 @@ import { useHoldingStore } from "../../stores/holdingStore";
 import { useAccountStore } from "../../stores/accountStore";
 import { useCategoryStore } from "../../stores/categoryStore";
 import { useQuoteStore } from "../../stores/quoteStore";
+import { useExchangeRateStore } from "../../stores/exchangeRateStore";
 import { usePnlColor } from "../../hooks/usePnlColor";
 import type { Holding, HoldingWithQuote, Market, Currency, StockQuote, Transaction, TransactionType } from "../../types";
 import dayjs from "dayjs";
@@ -84,6 +85,7 @@ export default function HoldingsPage() {
   const { categories, fetchCategories } = useCategoryStore();
   const { holdingQuotes, loading: quotesLoading, lastUpdatedAt, fetchHoldingQuotes } = useQuoteStore();
   const { pnlColorDark: pnlColorDarkFn } = usePnlColor();
+  const { convertWithCachedRates, fetchRates } = useExchangeRateStore();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [cashModalOpen, setCashModalOpen] = useState(false);
@@ -203,6 +205,10 @@ export default function HoldingsPage() {
     fetchAccounts();
     fetchCategories();
   }, [fetchHoldings, fetchAccounts, fetchCategories]);
+
+  useEffect(() => {
+    fetchRates();
+  }, [fetchRates]);
 
   // Load holdings with cached quotes when realtime display is enabled.
   // No periodic auto-refresh – the backend refreshes the cache on startup
@@ -447,8 +453,11 @@ export default function HoldingsPage() {
     {
       title: "当前市值",
       key: "market_value",
-      sorter: (a: HoldingWithQuote, b: HoldingWithQuote) =>
-        (a.market_value ?? 0) - (b.market_value ?? 0),
+      sorter: (a: HoldingWithQuote, b: HoldingWithQuote) => {
+        const aUsd = convertWithCachedRates(a.market_value ?? 0, a.currency, "USD");
+        const bUsd = convertWithCachedRates(b.market_value ?? 0, b.currency, "USD");
+        return aUsd - bUsd;
+      },
       defaultSortOrder: "descend" as const,
       render: (_: unknown, record: HoldingWithQuote) => {
         if (record.market_value === null || record.market_value === undefined)
@@ -459,8 +468,11 @@ export default function HoldingsPage() {
     {
       title: "盈亏",
       key: "unrealized_pnl",
-      sorter: (a: HoldingWithQuote, b: HoldingWithQuote) =>
-        (a.unrealized_pnl ?? 0) - (b.unrealized_pnl ?? 0),
+      sorter: (a: HoldingWithQuote, b: HoldingWithQuote) => {
+        const aUsd = convertWithCachedRates(a.unrealized_pnl ?? 0, a.currency, "USD");
+        const bUsd = convertWithCachedRates(b.unrealized_pnl ?? 0, b.currency, "USD");
+        return aUsd - bUsd;
+      },
       render: (_: unknown, record: HoldingWithQuote) => {
         const isCleared = isClearedPosition(record);
         return (
