@@ -135,6 +135,8 @@ export default function HoldingsPage() {
     HK: "HKD",
   };
 
+  const currencySymbol: Record<string, string> = { USD: "$", CNY: "¥", HKD: "HK$" };
+
   const handleAccountChange = useCallback(
     (accountId: string) => {
       const account = accounts.find((a) => a.id === accountId);
@@ -366,6 +368,7 @@ export default function HoldingsPage() {
       title: "股票代码",
       dataIndex: "symbol",
       key: "symbol",
+      width: 140,
       sorter: (a: HoldingWithQuote, b: HoldingWithQuote) => a.symbol.localeCompare(b.symbol),
       render: (symbol: string, record: HoldingWithQuote) => (
         <Space>
@@ -381,13 +384,14 @@ export default function HoldingsPage() {
       title: "所属账户",
       dataIndex: "account_id",
       key: "account_id",
-      width: 120,
+      width: 100,
       render: (id: string) => accountMap[id] || id,
     }] : []),
     {
       title: "投资类别",
       dataIndex: "category_id",
       key: "category_id",
+      width: 110,
       sorter: (a: HoldingWithQuote, b: HoldingWithQuote) => {
         const nameA = (a.category_id && categoryMap[a.category_id]?.name) || "";
         const nameB = (b.category_id && categoryMap[b.category_id]?.name) || "";
@@ -407,17 +411,19 @@ export default function HoldingsPage() {
       title: "持仓数量/金额",
       dataIndex: "shares",
       key: "shares",
+      width: 120,
       render: (v: number, record: HoldingWithQuote) =>
         isCashSymbol(record.symbol)
-          ? `${record.currency} ${v.toLocaleString(undefined, CURRENCY_FORMAT_OPTIONS)}`
+          ? `${currencySymbol[record.currency]}${v.toLocaleString(undefined, CURRENCY_FORMAT_OPTIONS)}`
           : v.toLocaleString(),
     },
     {
       title: "平均成本",
       dataIndex: "avg_cost",
       key: "avg_cost",
+      width: 100,
       render: (v: number, record: HoldingWithQuote) =>
-        isCashSymbol(record.symbol) ? "—" : `${record.currency} ${v.toFixed(3)}`,
+        isCashSymbol(record.symbol) ? "—" : `${currencySymbol[record.currency]}${v.toFixed(3)}`,
     },
   ];
 
@@ -425,11 +431,12 @@ export default function HoldingsPage() {
     {
       title: "实时价格",
       key: "current_price",
+      width: 90,
       render: (_: unknown, record: HoldingWithQuote) => {
         if (!record.quote) return quotesLoading ? <Spin size="small" /> : <span>—</span>;
         return (
           <span>
-            {record.currency} {record.quote.current_price.toFixed(2)}
+            {currencySymbol[record.currency]}{record.quote.current_price.toFixed(2)}
           </span>
         );
       },
@@ -462,7 +469,7 @@ export default function HoldingsPage() {
       render: (_: unknown, record: HoldingWithQuote) => {
         if (record.market_value === null || record.market_value === undefined)
           return <span>—</span>;
-        return `${record.currency} ${record.market_value.toFixed(2)}`;
+        return `${currencySymbol[record.currency]}${record.market_value.toFixed(2)}`;
       },
     },
     {

@@ -41,6 +41,8 @@ const marketCurrencyMap: Record<Market, Currency> = {
   HK: "HKD",
 };
 
+const currencySymbol: Record<string, string> = { USD: "$", CNY: "¥", HKD: "HK$" };
+
 // Default traded time: 1 hour after market open
 // US: 9:30 ET → 10:30 ET (use local hour 10, min 30)
 // CN: 9:30 CST → 10:30 CST (use local hour 10, min 30)
@@ -272,6 +274,7 @@ export default function TransactionsPage() {
       title: "类型",
       dataIndex: "transaction_type",
       key: "transaction_type",
+      width: 65,
       render: (type: TransactionType) => (
         <Tag color={type === "BUY" ? "green" : type === "OPEN" ? "blue" : "red"}>
           {type === "BUY" ? "买入" : type === "OPEN" ? "建仓" : "卖出"}
@@ -282,19 +285,22 @@ export default function TransactionsPage() {
       title: "股数",
       dataIndex: "shares",
       key: "shares",
+      width: 90,
       render: (v: number) => v.toLocaleString(),
     },
     {
       title: "价格",
       dataIndex: "price",
       key: "price",
-      render: (v: number, record: Transaction) => `${record.currency} ${v.toFixed(2)}`,
+      width: 115,
+      render: (v: number, record: Transaction) => `${currencySymbol[record.currency]}${v.toFixed(2)}`,
     },
     {
       title: "总金额",
       dataIndex: "total_amount",
       key: "total_amount",
-      render: (v: number, record: Transaction) => `${record.currency} ${v.toFixed(2)}`,
+      width: 140,
+      render: (v: number, record: Transaction) => `${currencySymbol[record.currency]}${v.toFixed(2)}`,
     },
     {
       title: "操作",
