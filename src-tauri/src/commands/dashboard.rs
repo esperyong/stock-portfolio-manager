@@ -7,6 +7,10 @@ use crate::services::quote_service::{fetch_quotes_batch_cached_with_providers, Q
 use crate::services::quote_provider_service;
 use tauri::State;
 
+fn to_usd_value(amount: f64, currency: &str, rates: &ExchangeRates) -> f64 {
+    convert_currency(amount, currency, "USD", rates)
+}
+
 /// Build HoldingDetail records from raw holdings + quotes + account/category lookups.
 /// This is the shared implementation; call `build_holding_details_pub` from other modules.
 ///
@@ -146,9 +150,24 @@ async fn build_holding_details(
 #[tauri::command(rename_all = "camelCase")]
 pub async fn get_holdings_with_quotes(
     db: State<'_, Database>,
+    cache: State<'_, ExchangeRateCache>,
     quote_cache: State<'_, QuoteCache>,
 ) -> Result<Vec<HoldingDetail>, String> {
-    build_holding_details(&db, &quote_cache, false).await
+    let mut details = build_holding_details(&db, &quote_cache, false).await?;
+
+    // Normalise market_value_usd so holdings across different currencies
+    // are sorted on a common USD basis.
+    let rates = get_cached_rates(&cache, &db).await.unwrap_or_else(|_| ExchangeRates {
+        usd_cny: 7.2,
+        usd_hkd: 7.8,
+        cny_hkd: 7.8 / 7.2,
+        updated_at: chrono::Utc::now().to_rfc3339(),
+    });
+    for d in &mut details {
+        d.market_value_usd = to_usd_value(d.market_value, &d.currency, &rates);
+    }
+
+    Ok(details)
 }
 
 #[tauri::command(rename_all = "camelCase")]
