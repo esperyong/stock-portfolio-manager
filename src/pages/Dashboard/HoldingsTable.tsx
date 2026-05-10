@@ -27,6 +27,11 @@ function fmtMoney(value: number, currency: string) {
 
 export default function HoldingsTable({ holdings, loading }: Props) {
   const { pnlColor } = usePnlColor();
+
+  const accountFilters = Array.from(new Set(holdings.map((h) => h.account_name))).map(
+    (name) => ({ text: name, value: name })
+  );
+
   const columns: ColumnsType<HoldingDetail> = [
     {
       title: "代码",
@@ -48,7 +53,8 @@ export default function HoldingsTable({ holdings, loading }: Props) {
       title: "账户",
       dataIndex: "account_name",
       key: "account_name",
-      sorter: (a, b) => a.account_name.localeCompare(b.account_name),
+      filters: accountFilters,
+      onFilter: (value, record) => record.account_name === value,
       ellipsis: true,
     },
     {
