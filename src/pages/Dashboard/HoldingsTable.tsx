@@ -79,6 +79,7 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       key: "name",
       sorter: (a, b) => a.name.localeCompare(b.name),
       ellipsis: true,
+      width: 150,
     },
     {
       title: "账户",
@@ -87,6 +88,7 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       filters: accountFilters,
       onFilter: (value, record) => record.account_name === value,
       ellipsis: true,
+      width: 120,
     },
     {
       title: "市场",
@@ -204,7 +206,7 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       dataSource={holdings}
       rowKey="id"
       loading={loading}
-      scroll={{ x: 1300 }}
+      scroll={{ x: 1100 }}
       size="small"
       pagination={{ pageSize: 20, showSizeChanger: true }}
       bordered
