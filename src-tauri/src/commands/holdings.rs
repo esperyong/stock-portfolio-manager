@@ -28,12 +28,12 @@ pub fn create_holding(
         )
         .map_err(|e| e.to_string())?;
 
-        // Insert an initial OPEN transaction to record the position entry
+        // Insert an initial BUY transaction to record the position entry
         let txn_id = uuid::Uuid::new_v4().to_string();
         let total_amount = shares * avg_cost;
         conn.execute(
             "INSERT INTO transactions (id, holding_id, account_id, symbol, name, market, transaction_type, shares, price, total_amount, commission, currency, traded_at, notes, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'OPEN', ?7, ?8, ?9, 0.0, ?10, ?11, NULL, ?12)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'BUY', ?7, ?8, ?9, 0.0, ?10, ?11, NULL, ?12)",
             rusqlite::params![
                 txn_id, id, account_id, symbol, name, market,
                 shares, avg_cost, total_amount, currency, now, now
@@ -184,7 +184,24 @@ pub fn update_holding(
 #[tauri::command(rename_all = "camelCase")]
 pub fn delete_holding(db: State<Database>, id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM holdings WHERE id = ?1", rusqlite::params![id])
+    conn.execute_batch("BEGIN IMMEDIATE").map_err(|e| e.to_string())?;
+    let result = (|| -> Result<(), String> {
+        // Delete all transactions that belong to this holding (including the
+        // initial BUY record created by create_holding).
+        conn.execute(
+            "DELETE FROM transactions WHERE holding_id = ?1",
+            rusqlite::params![id],
+        )
         .map_err(|e| e.to_string())?;
-    Ok(())
+        conn.execute("DELETE FROM holdings WHERE id = ?1", rusqlite::params![id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => conn.execute_batch("COMMIT").map_err(|e| e.to_string()),
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
 }

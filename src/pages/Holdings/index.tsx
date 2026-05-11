@@ -17,7 +17,8 @@ import {
   Spin,
   AutoComplete,
 } from "antd";
-import { PlusOutlined, ReloadOutlined, SyncOutlined, FilterOutlined, DollarOutlined } from "@ant-design/icons";
+import { PlusOutlined, ReloadOutlined, SyncOutlined, FilterOutlined, DollarOutlined, UploadOutlined } from "@ant-design/icons";
+import ImportHoldingFromCsvModal from "./ImportHoldingFromCsvModal";
 import { invoke } from "@tauri-apps/api/core";
 import { useHoldingStore } from "../../stores/holdingStore";
 import { useAccountStore } from "../../stores/accountStore";
@@ -89,6 +90,7 @@ export default function HoldingsPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [cashModalOpen, setCashModalOpen] = useState(false);
+  const [holdingCsvImportModalOpen, setHoldingCsvImportModalOpen] = useState(false);
   const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailHolding, setDetailHolding] = useState<HoldingWithQuote | null>(null);
@@ -234,6 +236,9 @@ export default function HoldingsPage() {
     try {
       if (editingHolding) {
         await updateHolding({ id: editingHolding.id, ...values });
+        // Reload holding quotes from DB cache (no API call) so the table
+        // immediately reflects the updated holding metadata.
+        fetchHoldingQuotes([]);
         message.success("持仓更新成功");
       } else {
         await createHolding(values);
@@ -348,6 +353,20 @@ export default function HoldingsPage() {
     }
   });
   displayDataRef.current = displayData;
+
+  // Determine if the "从CSV导入" button should be shown:
+  // visible only when a single CN account is selected and it has no active holdings.
+  const selectedAccount = filterAccountId
+    ? accounts.find((a) => a.id === filterAccountId)
+    : undefined;
+  const isCnAccountSelected = selectedAccount?.market === "CN";
+  const activeHoldingsForSelectedAccount = isCnAccountSelected && filterAccountId
+    ? allDisplayData.filter(
+        (h) => h.account_id === filterAccountId && (isCashSymbol(h.symbol) || h.shares > 0),
+      )
+    : [];
+  const showCsvImportButton =
+    isCnAccountSelected && !holdingsLoading && activeHoldingsForSelectedAccount.length === 0;
 
   // Extract unique (symbol, market) pairs from the visible holdings for
   // targeted refresh – only these symbols will be force-refreshed from the API.
@@ -550,6 +569,14 @@ export default function HoldingsPage() {
                 刷新行情
               </Button>
             </Tooltip>
+          )}
+          {showCsvImportButton && (
+            <Button
+              icon={<UploadOutlined />}
+              onClick={() => setHoldingCsvImportModalOpen(true)}
+            >
+              从CSV导入
+            </Button>
           )}
           <Button
             type="primary"
@@ -867,6 +894,19 @@ export default function HoldingsPage() {
           ]}
         />
       </Modal>
+
+      {/* Import Holdings from CSV Modal */}
+      {selectedAccount && (
+        <ImportHoldingFromCsvModal
+          open={holdingCsvImportModalOpen}
+          account={selectedAccount}
+          onClose={() => setHoldingCsvImportModalOpen(false)}
+          onImported={() => {
+            setHoldingCsvImportModalOpen(false);
+            fetchHoldings();
+          }}
+        />
+      )}
     </div>
   );
 }
