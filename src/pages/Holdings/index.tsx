@@ -236,6 +236,9 @@ export default function HoldingsPage() {
     try {
       if (editingHolding) {
         await updateHolding({ id: editingHolding.id, ...values });
+        // Reload holding quotes from DB cache (no API call) so the table
+        // immediately reflects the updated holding metadata.
+        fetchHoldingQuotes([]);
         message.success("持仓更新成功");
       } else {
         await createHolding(values);
