@@ -96,7 +96,10 @@ function splitLine(line: string): string[] {
 function formatSymbol(symbol: string, market: Market): string {
   if (market === "HK") {
     const digits = symbol.replace(/\D/g, "");
-    if (digits) return `${parseInt(digits, 10)}.HK`;
+    if (digits) {
+      const num = parseInt(digits, 10);
+      if (!isNaN(num)) return `${num}.HK`;
+    }
   }
   return symbol.toUpperCase();
 }
@@ -225,9 +228,7 @@ function parseIbOpenPositionsCsv(text: string, market: Market): ParseResult {
   return {
     rows: [],
     warnings: [
-      "未找到持仓数据。请确认 CSV 格式符合要求：\n" +
-        "• IB 活动报表 CSV（含 Open Positions 段落）\n" +
-        `• 或包含"Symbol"、"Quantity"、"Cost Price"列的扁平表格`,
+      "未找到持仓数据。请确认 CSV 格式符合要求：IB 活动报表 CSV（含 Open Positions 段落），或包含 Symbol、Quantity、Cost Price 列的扁平表格",
     ],
   };
 }
