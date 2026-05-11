@@ -32,6 +32,8 @@ interface ParsedRow {
   name: string;
   shares: number;
   avgCost: number;
+  currency: Currency;
+  market: Market;
   importOk?: boolean;
   importError?: string;
 }
@@ -101,18 +103,15 @@ function formatSymbol(symbol: string, market: Market): string {
   return symbol.toUpperCase();
 }
 
-// Section / summary labels that should never be treated as stock symbols.
-const SKIP_RE =
-  /^(Stocks|Bonds|Options|Futures|Forex|Total|USD|HKD|CNY|EUR|GBP|JPY|CAD|AUD|CHF|NZD|SGD)$/i;
-
 /**
  * Parse a Moomoo holdings CSV export.
  *
- * The exported file is a flat table with an English header row that includes:
- *   Symbol | Quantity | Mult | Cost Price | Cost Basis | Close Price | Value | Unrealized P/L | Code
- *
- * Section rows (e.g. "Stocks", "HKD", "USD") and the "Total" footer row are
- * automatically skipped.
+ * The exported file uses Chinese column headers. Key columns:
+ *   代码        – stock code (e.g. "00267" for HK, "AAPL" for US)
+ *   名称        – stock name
+ *   持有数量    – shares held
+ *   摊薄成本价  – diluted average cost price
+ *   币种        – currency (HKD / USD / ...)
  */
 function parseMoomooHoldingsCsv(text: string, market: Market): ParseResult {
   const stripped = text.startsWith("\uFEFF") ? text.slice(1) : text;
@@ -121,17 +120,12 @@ function parseMoomooHoldingsCsv(text: string, market: Market): ParseResult {
 
   for (let i = 0; i < lines.length; i++) {
     const cols = splitLine(lines[i]).map((c) => c.trim());
-    if (
-      cols.includes("Symbol") &&
-      cols.includes("Quantity") &&
-      (cols.includes("Cost Price") || cols.includes("Avg Cost"))
-    ) {
-      const iSymbol    = cols.indexOf("Symbol");
-      const iQty       = cols.indexOf("Quantity");
-      const iCostPrice =
-        cols.indexOf("Cost Price") !== -1
-          ? cols.indexOf("Cost Price")
-          : cols.indexOf("Avg Cost");
+    if (cols.includes("代码") && cols.includes("持有数量") && cols.includes("摊薄成本价")) {
+      const iCode      = cols.indexOf("代码");
+      const iName      = cols.indexOf("名称");
+      const iQty       = cols.indexOf("持有数量");
+      const iCostPrice = cols.indexOf("摊薄成本价");
+      const iCurrency  = cols.indexOf("币种");
 
       const rows: ParsedRow[] = [];
       let idx = 0;
@@ -141,20 +135,39 @@ function parseMoomooHoldingsCsv(text: string, market: Market): ParseResult {
         if (!line) continue;
 
         const dataCols = splitLine(line);
-        const raw      = (dataCols[iSymbol] ?? "").trim();
-        if (!raw || SKIP_RE.test(raw)) continue;
+        const raw      = (dataCols[iCode] ?? "").trim();
+        if (!raw) continue;
 
         const qty       = parseNum(dataCols[iQty]);
         const costPrice = parseNum(dataCols[iCostPrice]);
         if (isNaN(qty) || qty <= 0 || isNaN(costPrice)) continue;
 
+        const name     = iName !== -1 ? (dataCols[iName] ?? "").trim() : raw;
+        // Derive currency from the 币种 column when available; fall back to account market
+        const currencyRaw = iCurrency !== -1 ? (dataCols[iCurrency] ?? "").trim().toUpperCase() : "";
+        const currency: Currency =
+          currencyRaw === "HKD" ? "HKD"
+          : currencyRaw === "USD" ? "USD"
+          : currencyRaw === "CNY" || currencyRaw === "CNH" ? "CNY"
+          : market === "HK" ? "HKD"
+          : "USD";
+
+        // Determine effective market from currency when account has mixed markets
+        const effectiveMarket: Market =
+          currency === "HKD" ? "HK"
+          : currency === "CNY" || currency === "CNH" ? "CN"
+          : market === "HK" ? "US"   // HK account but USD stock → likely US-listed
+          : market;
+
         rows.push({
           key:      String(idx++),
           selected: true,
-          symbol:   formatSymbol(raw, market),
-          name:     raw,
+          symbol:   formatSymbol(raw, effectiveMarket),
+          name,
           shares:   qty,
           avgCost:  costPrice,
+          currency,
+          market:   effectiveMarket,
         });
       }
 
@@ -165,7 +178,7 @@ function parseMoomooHoldingsCsv(text: string, market: Market): ParseResult {
   return {
     rows: [],
     warnings: [
-      "未找到持仓数据。请确认上传的 CSV 是 Moomoo 客户端导出的持仓文件，且包含 Symbol、Quantity、Cost Price 列",
+      "未找到持仓数据。请确认上传的 CSV 是 Moomoo 客户端导出的持仓文件，且包含「代码、持有数量、摊薄成本价」列",
     ],
   };
 }
@@ -193,10 +206,8 @@ export default function ImportHoldingFromMoomooCsvModal({
 
   const { createHolding } = useHoldingStore();
 
-  const market: Market     = account.market as Market;
-  const currency: Currency = market === "HK" ? "HKD" : "USD";
-  const marketLabel        = market === "HK" ? "港股" : "美股";
-  const tagColor           = market === "HK" ? "green" : "blue";
+  const market: Market = account.market as Market;
+  const marketLabel    = market === "HK" ? "港股" : "美股";
 
   const resetModal = useCallback(() => {
     setStep(0);
@@ -245,10 +256,10 @@ export default function ImportHoldingFromMoomooCsvModal({
           accountId: account.id,
           symbol:    row.symbol,
           name:      row.name || row.symbol,
-          market,
+          market:    row.market,
           shares:    row.shares,
           avgCost:   row.avgCost,
-          currency,
+          currency:  row.currency,
         });
         setRows((prev) =>
           prev.map((r) => (r.key === row.key ? { ...r, importOk: true } : r)),
@@ -295,8 +306,14 @@ export default function ImportHoldingFromMoomooCsvModal({
     {
       title: "类型",
       key:   "type",
-      width: 65,
-      render: () => <Tag color={tagColor}>{marketLabel}</Tag>,
+      width: 70,
+      render: (_: unknown, record: ParsedRow) => {
+        const color =
+          record.market === "HK" ? "green"
+          : record.market === "CN" ? "red"
+          : "blue";
+        return <Tag color={color}>{record.market}</Tag>;
+      },
     },
     {
       title: "股票代码",
