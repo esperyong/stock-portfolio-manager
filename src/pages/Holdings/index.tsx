@@ -428,7 +428,7 @@ export default function HoldingsPage() {
       title: "投资类别",
       dataIndex: "category_id",
       key: "category_id",
-      width: 110,
+      width: 105,
       sorter: (a: HoldingWithQuote, b: HoldingWithQuote) => {
         const nameA = (a.category_id && categoryMap[a.category_id]?.name) || "";
         const nameB = (b.category_id && categoryMap[b.category_id]?.name) || "";
@@ -445,10 +445,10 @@ export default function HoldingsPage() {
       },
     },
     {
-      title: "持仓数量/金额",
+      title: "持仓数量 / 金额",
       dataIndex: "shares",
       key: "shares",
-      width: 120,
+      width: 100,
       render: (v: number, record: HoldingWithQuote) =>
         isCashSymbol(record.symbol)
           ? `${currencySymbol[record.currency]}${v.toLocaleString(undefined, CURRENCY_FORMAT_OPTIONS)}`
@@ -468,7 +468,7 @@ export default function HoldingsPage() {
     {
       title: "实时价格",
       key: "current_price",
-      width: 90,
+      width: 100,
       render: (_: unknown, record: HoldingWithQuote) => {
         if (!record.quote) return quotesLoading ? <Spin size="small" /> : <span>—</span>;
         return (
