@@ -79,6 +79,11 @@ function computeCashDelta(txn: Transaction): number {
   }
 }
 
+type CashFlowRow = Transaction & {
+  cashDelta: number;
+  runningBalance: number;
+};
+
 /** Shared formatting options for displaying currency amounts. */
 const CURRENCY_FORMAT_OPTIONS: Intl.NumberFormatOptions = {
   minimumFractionDigits: 2,
@@ -90,6 +95,12 @@ const marketColors: Record<Market, string> = {
   CN: "red",
   HK: "green",
 };
+
+function shareInputProps(market?: Market) {
+  return market === "US"
+    ? { min: 0.000001, precision: 6, placeholder: "持有股数" }
+    : { min: 1, precision: 0, placeholder: "持有股数" };
+}
 
 function PnlText({ value, percent }: { value: number | null; percent: number | null }) {
   const { pnlColorDark } = usePnlColor();
@@ -131,6 +142,7 @@ export default function HoldingsPage() {
   const [showCleared, setShowCleared] = useState(false);
   const [form] = Form.useForm();
   const [cashForm] = Form.useForm();
+  const selectedFormMarket = Form.useWatch("market", form) as Market | undefined;
   const [fetchingName, setFetchingName] = useState(false);
   const [filterAccountId, setFilterAccountId] = useState<string | undefined>(undefined);
   const [filterMarket, setFilterMarket] = useState<Market | undefined>(undefined);
@@ -384,7 +396,7 @@ export default function HoldingsPage() {
   // Compute cash flow rows for the cash holding detail modal.
   // Transactions are sorted chronologically (ascending) to compute the running
   // balance, then reversed so the table shows the most recent entry first.
-  const cashFlowRows = useMemo(() => {
+  const cashFlowRows = useMemo<CashFlowRow[]>(() => {
     if (!detailHolding || !isCashSymbol(detailHolding.symbol)) return [];
     const sorted = [...detailTransactions].sort(
       (a, b) => new Date(a.traded_at).getTime() - new Date(b.traded_at).getTime(),
@@ -872,7 +884,10 @@ export default function HoldingsPage() {
                 style={{ marginBottom: 12 }}
                 rules={[{ required: true, message: "请输入持仓股数" }]}
               >
-                <InputNumber min={0} precision={0} style={{ width: "100%" }} placeholder="持有股数" />
+                <InputNumber
+                  {...shareInputProps(selectedFormMarket)}
+                  style={{ width: "100%" }}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -970,7 +985,7 @@ export default function HoldingsPage() {
       >
         {detailHolding && isCashSymbol(detailHolding.symbol) ? (
           /* Cash flow history: shows all account transactions with cash impact */
-          <Table
+          <Table<CashFlowRow>
             dataSource={cashFlowRows}
             rowKey="id"
             loading={detailLoading}
@@ -989,7 +1004,7 @@ export default function HoldingsPage() {
                 dataIndex: "transaction_type",
                 key: "transaction_type",
                 width: 80,
-                render: (type: TransactionType, record: Transaction & { cashDelta: number }) => {
+                render: (type: TransactionType, record: CashFlowRow) => {
                   if (isCashSymbol(record.symbol)) {
                     return <Tag color="blue">存入</Tag>;
                   }
@@ -1006,7 +1021,7 @@ export default function HoldingsPage() {
               {
                 title: "股票",
                 key: "stock",
-                render: (_: unknown, record: Transaction) => {
+                render: (_: unknown, record: CashFlowRow) => {
                   if (isCashSymbol(record.symbol)) {
                     return <span className="text-gray-500">—</span>;
                   }
@@ -1023,7 +1038,7 @@ export default function HoldingsPage() {
                 key: "cashDelta",
                 width: 140,
                 align: "right" as const,
-                render: (_: unknown, record: Transaction & { cashDelta: number }) => {
+                render: (_: unknown, record: CashFlowRow) => {
                   const delta = record.cashDelta;
                   const sym = currencySymbol[record.currency] ?? "";
                   const isPositive = delta >= 0;
@@ -1040,7 +1055,7 @@ export default function HoldingsPage() {
                 key: "runningBalance",
                 width: 140,
                 align: "right" as const,
-                render: (_: unknown, record: Transaction & { runningBalance: number }) => {
+                render: (_: unknown, record: CashFlowRow) => {
                   const sym = currencySymbol[record.currency] ?? "";
                   return (
                     <span style={{ fontWeight: 500 }}>
