@@ -743,23 +743,21 @@ export default function HoldingsPage() {
         width={600}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
+          <Form.Item
+            name="accountId"
+            label="所属账户"
+            style={{ marginBottom: 12 }}
+            rules={[{ required: true, message: "请选择账户" }]}
+          >
+            <Select placeholder="选择证券账户" onChange={handleAccountChange}>
+              {accounts.map((a) => (
+                <Select.Option key={a.id} value={a.id}>
+                  [{a.market}] {a.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item
-                name="accountId"
-                label="所属账户"
-                style={{ marginBottom: 12 }}
-                rules={[{ required: true, message: "请选择账户" }]}
-              >
-                <Select placeholder="选择证券账户" onChange={handleAccountChange}>
-                  {accounts.map((a) => (
-                    <Select.Option key={a.id} value={a.id}>
-                      [{a.market}] {a.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
             <Col span={12}>
               <Form.Item
                 name="symbol"
@@ -776,8 +774,6 @@ export default function HoldingsPage() {
                 />
               </Form.Item>
             </Col>
-          </Row>
-          <Row gutter={12}>
             <Col span={12}>
               <Form.Item
                 name="name"
@@ -791,33 +787,17 @@ export default function HoldingsPage() {
                 />
               </Form.Item>
             </Col>
-            <Col span={12}>
-              <Form.Item
-                name="market"
-                label="市场"
-                style={{ marginBottom: 12 }}
-                rules={[{ required: true, message: "请选择市场" }]}
-              >
-                <Select placeholder="选择市场">
-                  <Select.Option value="US">🇺🇸 美股</Select.Option>
-                  <Select.Option value="CN">🇨🇳 A股</Select.Option>
-                  <Select.Option value="HK">🇭🇰 港股</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
           </Row>
+          <Form.Item name="categoryId" label="投资类别" style={{ marginBottom: 12 }}>
+            <Select placeholder="选择投资类别（可选）" allowClear>
+              {categories.map((c) => (
+                <Select.Option key={c.id} value={c.id}>
+                  {c.icon} {c.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="categoryId" label="投资类别" style={{ marginBottom: 12 }}>
-                <Select placeholder="选择投资类别（可选）" allowClear>
-                  {categories.map((c) => (
-                    <Select.Option key={c.id} value={c.id}>
-                      {c.icon} {c.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
             <Col span={12}>
               <Form.Item
                 name="shares"
@@ -828,16 +808,30 @@ export default function HoldingsPage() {
                 <InputNumber min={0} precision={0} style={{ width: "100%" }} placeholder="持有股数" />
               </Form.Item>
             </Col>
-          </Row>
-          <Row gutter={12}>
             <Col span={12}>
               <Form.Item
                 name="avgCost"
                 label="平均成本价"
-                style={{ marginBottom: 0 }}
+                style={{ marginBottom: 12 }}
                 rules={[{ required: true, message: "请输入平均成本价" }]}
               >
                 <InputNumber precision={4} style={{ width: "100%" }} placeholder="买入均价" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="market"
+                label="市场"
+                style={{ marginBottom: 0 }}
+                rules={[{ required: true, message: "请选择市场" }]}
+              >
+                <Select placeholder="选择市场">
+                  <Select.Option value="US">🇺🇸 美股</Select.Option>
+                  <Select.Option value="CN">🇨🇳 A股</Select.Option>
+                  <Select.Option value="HK">🇭🇰 港股</Select.Option>
+                </Select>
               </Form.Item>
             </Col>
             <Col span={12}>

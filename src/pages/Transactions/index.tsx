@@ -496,16 +496,6 @@ export default function TransactionsPage() {
           </Row>
           <Row gutter={12}>
             <Col span={12}>
-              <Form.Item name="market" label="市场" style={{ marginBottom: 12 }}
-                rules={[{ required: true, message: "请选择市场" }]}>
-                <Select placeholder="选择市场">
-                  <Select.Option value="US">🇺🇸 美股</Select.Option>
-                  <Select.Option value="CN">🇨🇳 A股</Select.Option>
-                  <Select.Option value="HK">🇭🇰 港股</Select.Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
               <Form.Item name="transactionType" label="交易类型" style={{ marginBottom: 12 }}
                 rules={[{ required: true, message: "请选择交易类型" }]}>
                 <Select placeholder="买入 / 卖出 / 分红">
@@ -513,6 +503,12 @@ export default function TransactionsPage() {
                   <Select.Option value="SELL">卖出</Select.Option>
                   <Select.Option value="PAY">分红</Select.Option>
                 </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="tradedAt" label="成交时间" style={{ marginBottom: 12 }}
+                rules={[{ required: true, message: "请选择成交时间" }]}>
+                <DatePicker showTime style={{ width: "100%" }} />
               </Form.Item>
             </Col>
           </Row>
@@ -549,6 +545,16 @@ export default function TransactionsPage() {
           </Row>
           <Row gutter={12}>
             <Col span={12}>
+              <Form.Item name="market" label="市场" style={{ marginBottom: 12 }}
+                rules={[{ required: true, message: "请选择市场" }]}>
+                <Select placeholder="选择市场">
+                  <Select.Option value="US">🇺🇸 美股</Select.Option>
+                  <Select.Option value="CN">🇨🇳 A股</Select.Option>
+                  <Select.Option value="HK">🇭🇰 港股</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
               <Form.Item name="currency" label="币种" style={{ marginBottom: 12 }}
                 rules={[{ required: true, message: "请选择币种" }]}>
                 <Select placeholder="选择币种">
@@ -556,12 +562,6 @@ export default function TransactionsPage() {
                   <Select.Option value="CNY">CNY 人民币</Select.Option>
                   <Select.Option value="HKD">HKD 港元</Select.Option>
                 </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="tradedAt" label="成交时间" style={{ marginBottom: 12 }}
-                rules={[{ required: true, message: "请选择成交时间" }]}>
-                <DatePicker showTime style={{ width: "100%" }} />
               </Form.Item>
             </Col>
           </Row>
