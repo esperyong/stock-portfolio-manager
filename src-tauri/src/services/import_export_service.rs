@@ -213,11 +213,15 @@ pub fn get_transactions_template() -> String {
     let mut wtr = WriterBuilder::new().from_writer(vec![]);
     let _ = wtr.write_record(&[
         "traded_at", "symbol", "name", "market", "transaction_type",
-        "shares", "price", "commission", "currency", "notes",
+        "shares", "price", "total_amount", "commission", "currency", "notes",
     ]);
     let _ = wtr.write_record(&[
         "2024-01-15", "AAPL", "苹果", "US", "BUY",
-        "100", "150.00", "0", "USD", "",
+        "100", "150.00", "", "0", "USD", "",
+    ]);
+    let _ = wtr.write_record(&[
+        "2024-03-01", "AAPL", "苹果", "US", "PAY",
+        "0", "0", "50.00", "0", "USD", "分红派息",
     ]);
     String::from_utf8(wtr.into_inner().unwrap_or_default()).unwrap_or_default()
 }
@@ -406,7 +410,12 @@ pub fn confirm_import(db: &Database, import_data: &ImportData) -> Result<ImportR
                 let n = extract_str(row, "notes").to_string();
                 if n.is_empty() { None } else { Some(n) }
             };
-            let total_amount = shares * price;
+            // For PAY (dividend) rows the amount comes from the optional
+            // `total_amount` column; for other types fall back to shares * price.
+            let total_amount: f64 = {
+                let col_val: f64 = extract_str(row, "total_amount").parse().unwrap_or(0.0);
+                if col_val > 0.0 { col_val } else { shares * price }
+            };
 
             if symbol.is_empty() || traded_at.is_empty() {
                 skipped_count += 1;
@@ -518,6 +527,14 @@ pub fn confirm_import(db: &Database, import_data: &ImportData) -> Result<ImportR
                         price
                     };
                     (total, avg)
+                } else if tx_type == "PAY" {
+                    // Dividend: shares unchanged; avg_cost reduced by dividend per share
+                    let new_avg = if cur_shares > 0.0 {
+                        ((cur_shares * cur_avg_cost - total_amount) / cur_shares).max(0.0)
+                    } else {
+                        cur_avg_cost
+                    };
+                    (cur_shares, new_avg)
                 } else {
                     // SELL: shares decrease, avg_cost unchanged
                     (cur_shares - shares, cur_avg_cost)
