@@ -39,6 +39,7 @@ interface EditableRow {
   shares: number;
   total_amount: number;
   commission: number;
+  notes?: string;
   lookingUp?: boolean;
   importOk?: boolean;
   importError?: string;
@@ -250,6 +251,7 @@ function parseThsCsv(text: string): EditableRow[] {
       shares: isDividend ? 0 : Math.abs(shares),
       total_amount,
       commission,
+      notes: isDividend ? "分红派息" : undefined,
     });
   }
 
@@ -400,6 +402,7 @@ export default function ImportFromThsCsvModal({
           commission: r.commission,
           currency: "CNY",
           tradedAt: new Date(r.traded_at).toISOString(),
+          notes: r.notes ?? null,
         });
         success++;
         updateRow(r.key, { importOk: true, importError: undefined });

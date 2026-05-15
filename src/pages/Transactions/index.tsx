@@ -276,8 +276,8 @@ export default function TransactionsPage() {
       key: "transaction_type",
       width: 65,
       render: (type: TransactionType) => (
-        <Tag color={type === "BUY" ? "green" : type === "OPEN" ? "blue" : "red"}>
-          {type === "BUY" ? "买入" : type === "OPEN" ? "建仓" : "卖出"}
+        <Tag color={type === "BUY" ? "green" : type === "OPEN" ? "blue" : type === "PAY" ? "orange" : "red"}>
+          {type === "BUY" ? "买入" : type === "OPEN" ? "建仓" : type === "PAY" ? "分红" : "卖出"}
         </Tag>
       ),
     },

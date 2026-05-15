@@ -1,6 +1,6 @@
 export type Market = "US" | "CN" | "HK";
 export type Currency = "USD" | "CNY" | "HKD";
-export type TransactionType = "BUY" | "SELL" | "OPEN";
+export type TransactionType = "BUY" | "SELL" | "OPEN" | "PAY";
 
 export interface Account {
   id: string;
