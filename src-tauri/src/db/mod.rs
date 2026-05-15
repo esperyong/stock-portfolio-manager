@@ -337,6 +337,7 @@ fn migrate_transactions_check_constraint(conn: &Connection) -> Result<()> {
     ")?;
 
     Ok(())
+}
 
 #[cfg(test)]
 mod tests;
