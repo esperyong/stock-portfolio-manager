@@ -414,7 +414,7 @@ pub fn confirm_import(db: &Database, import_data: &ImportData) -> Result<ImportR
             // `total_amount` column; for other types fall back to shares * price.
             let total_amount: f64 = {
                 let col_val: f64 = extract_str(row, "total_amount").parse().unwrap_or(0.0);
-                if col_val > 0.0 { col_val } else { shares * price }
+                if col_val.abs() > 0.0 { col_val } else { shares * price }
             };
 
             if symbol.is_empty() || traded_at.is_empty() {
