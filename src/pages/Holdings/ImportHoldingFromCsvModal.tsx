@@ -118,6 +118,11 @@ function splitLine(line: string): string[] {
  *   Holdings header row: … | 证券代码 | 证券名称 | 持仓数量 | … | 参考成本价 | … | 交易市场 | …
  *   Key columns: 持仓数量 (shares), 参考成本价 (avg cost)
  *   Exchange column: 交易市场 → "深圳A股" / "上海A股".
+ *
+ * Format 3 – Fallback (some brokers via 同花顺)
+ *   Holdings header row: … | 证券代码 | 证券名称 | 股票余额 | … | 成本价/参考成本价 | …
+ *   Key columns: 股票余额 (shares), 成本价 or 参考成本价 (avg cost)
+ *   Used when neither 参考持股 nor 持仓数量 columns are present.
  */
 function parseCsv(text: string): ParseResult {
   const stripped = text.startsWith("\uFEFF") ? text.slice(1) : text;
@@ -191,6 +196,10 @@ function parseCsv(text: string): ParseResult {
   const iCostF2 = col("参考成本价");
   const iMarketF2 = col("交易市场");
 
+  // Format 3 fallback key columns (some brokers via 同花顺 use 股票余额)
+  const iSharesF3 = col("股票余额");
+  const iCostF3 = iCostF1 !== -1 ? iCostF1 : iCostF2; // reuse whichever cost col exists
+
   let iShares = -1;
   let iCost = -1;
   let iMarket = -1;
@@ -203,6 +212,10 @@ function parseCsv(text: string): ParseResult {
     iShares = iSharesF2;
     iCost = iCostF2;
     iMarket = iMarketF2;
+  } else if (iSharesF3 !== -1 && iCostF3 !== -1) {
+    iShares = iSharesF3;
+    iCost = iCostF3;
+    iMarket = iMarketF2; // use 交易市场 if present
   }
 
   if (iCode === -1 || iName === -1 || iShares === -1 || iCost === -1) {
@@ -211,7 +224,8 @@ function parseCsv(text: string): ParseResult {
       warnings: [
         "无法识别CSV格式，请确认文件包含以下列之一：\n" +
           "• 证券代码、证券名称、参考持股、成本价（同花顺格式）\n" +
-          "• 证券代码、证券名称、持仓数量、参考成本价（通用格式）",
+          "• 证券代码、证券名称、持仓数量、参考成本价（通用格式）\n" +
+          "• 证券代码、证券名称、股票余额、成本价/参考成本价（兼容格式）",
       ],
     };
   }
@@ -539,6 +553,9 @@ export default function ImportHoldingFromCsvModal({
                 </li>
                 <li>
                   <b>通用格式</b>：含"证券代码"、"证券名称"、"持仓数量"、"参考成本价"列的CSV
+                </li>
+                <li>
+                  <b>兼容格式</b>：含"证券代码"、"证券名称"、"股票余额"、"成本价/参考成本价"列的CSV（部分券商通过同花顺导出）
                 </li>
               </ul>
             }
