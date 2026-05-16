@@ -199,10 +199,12 @@ function MarketTable({
           const sellEntries = [...totalsByCurrency.entries()].filter(([, t]) => t.sell > 0);
           return (
             <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={2}>
+              {/* colSpan=3: expand-toggle(0) + 代码(1) + 名称(2) */}
+              <Table.Summary.Cell index={0} colSpan={3}>
                 <Text strong>合计</Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={2}>
+              {/* index=3 aligns with 买入 column */}
+              <Table.Summary.Cell index={3}>
                 {buyEntries.length > 0 ? (
                   buyEntries.map(([cur, t]) => (
                     <div key={cur}>
@@ -215,7 +217,8 @@ function MarketTable({
                   <Text type="secondary">—</Text>
                 )}
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={3}>
+              {/* index=4 aligns with 卖出 column */}
+              <Table.Summary.Cell index={4}>
                 {sellEntries.length > 0 ? (
                   sellEntries.map(([cur, t]) => (
                     <div key={cur}>
@@ -228,7 +231,8 @@ function MarketTable({
                   <Text type="secondary">—</Text>
                 )}
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={4} />
+              {/* index=5: 净交易股数 column — intentionally empty */}
+              <Table.Summary.Cell index={5} />
             </Table.Summary.Row>
           );
         }}
