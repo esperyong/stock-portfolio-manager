@@ -72,6 +72,7 @@ export default function TransactionsPage() {
   const [accountHoldings, setAccountHoldings] = useState<Holding[]>([]);
   const [symbolSearching, setSymbolSearching] = useState(false);
   const [filterAccountId, setFilterAccountId] = useState<string | undefined>(undefined);
+  const [stockColumnFilters, setStockColumnFilters] = useState<string[] | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [excelImportModalOpen, setExcelImportModalOpen] = useState(false);
   const [csvImportModalOpen, setCsvImportModalOpen] = useState(false);
@@ -82,6 +83,11 @@ export default function TransactionsPage() {
     fetchTransactions();
     fetchAccounts();
   }, [fetchTransactions, fetchAccounts]);
+
+  const handleFilterAccountChange = useCallback((v: string | undefined) => {
+    setFilterAccountId(v);
+    setStockColumnFilters(null);
+  }, []);
 
   // When account changes, set default market/currency/time and load holdings
   const handleAccountChange = useCallback(async (accountId: string) => {
@@ -245,10 +251,25 @@ export default function TransactionsPage() {
 
   const accountMap = Object.fromEntries(accounts.map((a) => [a.id, a.name]));
 
-  // Apply account filter
+  // Apply account filter (symbol filtering handled by Table column)
   const displayData = useMemo(() => {
     if (!filterAccountId) return transactions;
     return transactions.filter((t) => t.account_id === filterAccountId);
+  }, [transactions, filterAccountId]);
+
+  // Unique stock filters for the "股票" column header, scoped to account
+  const symbolColumnFilters = useMemo(() => {
+    if (!filterAccountId) return [];
+    const base = transactions.filter((t) => t.account_id === filterAccountId);
+    const seen = new Set<string>();
+    const filters: { text: string; value: string }[] = [];
+    for (const t of base) {
+      if (!seen.has(t.symbol)) {
+        seen.add(t.symbol);
+        filters.push({ text: t.name ? `${t.symbol} ${t.name}` : t.symbol, value: t.symbol });
+      }
+    }
+    return filters;
   }, [transactions, filterAccountId]);
 
   const columns = [
@@ -264,6 +285,12 @@ export default function TransactionsPage() {
       key: "stock",
       width: 220,
       ellipsis: true,
+      ...(filterAccountId ? {
+        filters: symbolColumnFilters,
+        filterSearch: true,
+        filteredValue: stockColumnFilters,
+        onFilter: (value: unknown, record: Transaction) => record.symbol === value,
+      } : {}),
       render: (_: unknown, record: Transaction) => (
         <Space>
           <Tag color={marketColors[record.market]}>{record.market}</Tag>
@@ -308,6 +335,13 @@ export default function TransactionsPage() {
       dataIndex: "total_amount",
       key: "total_amount",
       width: 140,
+      render: (v: number, record: Transaction) => `${currencySymbol[record.currency]}${v.toFixed(2)}`,
+    },
+    {
+      title: "手续费",
+      dataIndex: "commission",
+      key: "commission",
+      width: 90,
       render: (v: number, record: Transaction) => `${currencySymbol[record.currency]}${v.toFixed(2)}`,
     },
     {
@@ -422,7 +456,7 @@ export default function TransactionsPage() {
             <Text type="secondary">按账户:</Text>
             <Select
               value={filterAccountId}
-              onChange={setFilterAccountId}
+              onChange={handleFilterAccountChange}
               placeholder="全部账户"
               allowClear
               style={{ width: 180 }}
@@ -443,6 +477,10 @@ export default function TransactionsPage() {
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 20 }}
+        onChange={(_pagination, filters) => {
+          const stockFilters = filters["stock"];
+          setStockColumnFilters(stockFilters ? (stockFilters as string[]) : null);
+        }}
       />
 
       <Modal
