@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Card, Form, Input, Radio, Select, Typography, message } from "antd";
+import { Card, Checkbox, Form, Input, Radio, Select, Typography, message } from "antd";
 import { invoke } from "@tauri-apps/api/core";
 import { useQuoteStore } from "../../stores/quoteStore";
 import { useSettingsStore, type ColorScheme } from "../../stores/settingsStore";
@@ -41,7 +41,11 @@ export default function GeneralSettings() {
     cn_provider: "xueqiu",
     xueqiu_cookie: null,
     xueqiu_u: null,
+    cn_adjust_sell_pay_cost: true,
+    us_adjust_sell_pay_cost: false,
+    hk_adjust_sell_pay_cost: false,
   });
+  const [recalculating, setRecalculating] = useState(false);
 
   useEffect(() => {
     invoke<QuoteProviderConfig>("get_quote_provider_config")
@@ -89,6 +93,25 @@ export default function GeneralSettings() {
       message.success("雪球用户 ID 已更新");
     } catch (err) {
       message.error("更新失败: " + String(err));
+    }
+  };
+
+  const handleCostAdjustChange = async (
+    key: "cn_adjust_sell_pay_cost" | "us_adjust_sell_pay_cost" | "hk_adjust_sell_pay_cost",
+    checked: boolean
+  ) => {
+    const updated = { ...providerConfig, [key]: checked };
+    try {
+      await invoke("update_quote_provider_config", { config: updated });
+      setProviderConfig(updated);
+      // Recalculate all holding cost bases from scratch with the new setting.
+      setRecalculating(true);
+      await invoke("recalculate_holdings_cost");
+      message.success("持仓成本已根据新设置重新计算");
+    } catch (err) {
+      message.error("更新失败: " + String(err));
+    } finally {
+      setRecalculating(false);
     }
   };
 
@@ -199,6 +222,52 @@ export default function GeneralSettings() {
         </Form>
         <Paragraph type="secondary">
           设置持仓行情的自动刷新间隔时间，应用到所有行情数据的自动刷新。修改后将立即生效。
+        </Paragraph>
+      </Card>
+
+      <Card title="持仓成本调整设置">
+        <Paragraph>
+          买入交易始终会更新持仓均摊成本。卖出和分红是否同步调整均摊成本，可按市场单独设置。
+          更改后系统将自动从历史交易记录中重新计算所有持仓成本，请稍候。
+        </Paragraph>
+        <Form layout="vertical" style={{ maxWidth: 480 }}>
+          <Form.Item>
+            <Checkbox
+              checked={providerConfig.cn_adjust_sell_pay_cost ?? true}
+              disabled={recalculating}
+              onChange={(e) =>
+                handleCostAdjustChange("cn_adjust_sell_pay_cost", e.target.checked)
+              }
+            >
+              A 股：卖出与分红同步调整持仓均摊成本（默认开启，符合 A 股券商惯例）
+            </Checkbox>
+          </Form.Item>
+          <Form.Item>
+            <Checkbox
+              checked={providerConfig.us_adjust_sell_pay_cost ?? false}
+              disabled={recalculating}
+              onChange={(e) =>
+                handleCostAdjustChange("us_adjust_sell_pay_cost", e.target.checked)
+              }
+            >
+              美股：卖出与分红同步调整持仓均摊成本（默认关闭，符合 IB 等券商惯例）
+            </Checkbox>
+          </Form.Item>
+          <Form.Item style={{ marginBottom: 0 }}>
+            <Checkbox
+              checked={providerConfig.hk_adjust_sell_pay_cost ?? false}
+              disabled={recalculating}
+              onChange={(e) =>
+                handleCostAdjustChange("hk_adjust_sell_pay_cost", e.target.checked)
+              }
+            >
+              港股：卖出与分红同步调整持仓均摊成本（默认关闭，符合 IB 等券商惯例）
+            </Checkbox>
+          </Form.Item>
+        </Form>
+        <Paragraph type="secondary" style={{ marginTop: 12 }}>
+          A 股投资收益免税，国内券商通常在卖出或分红后同步调低均摊成本，方便投资者追踪实际持仓成本。
+          港股和美股的卖出盈亏需缴所得税、分红需缴红利税，IB 等券商不调整成本，便于准确计算应税收益。
         </Paragraph>
       </Card>
     </div>

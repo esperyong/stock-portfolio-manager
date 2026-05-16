@@ -2,6 +2,7 @@ use crate::db::Database;
 use crate::models::import_export::{
     ExportFilters, ImportData, ImportError, ImportPreview, ImportResult,
 };
+use crate::services::quote_provider_service::market_adjusts_sell_pay_cost;
 use chrono::Utc;
 use csv::WriterBuilder;
 use std::collections::HashMap;
@@ -519,6 +520,8 @@ pub fn confirm_import(db: &Database, import_data: &ImportData) -> Result<ImportR
                     continue;
                 }
 
+                let adjust = market_adjusts_sell_pay_cost(&conn, &market);
+
                 let (new_shares, new_avg_cost) = if tx_type == "BUY" {
                     let total = cur_shares + shares;
                     let avg = if total > 0.0 {
@@ -528,20 +531,26 @@ pub fn confirm_import(db: &Database, import_data: &ImportData) -> Result<ImportR
                     };
                     (total, avg)
                 } else if tx_type == "PAY" {
-                    // Dividend: shares unchanged; avg_cost reduced by dividend amount per share.
-                    let new_avg = if cur_shares > 0.0 {
+                    // Dividend: shares unchanged.
+                    // Adjust avg_cost only when the market setting is enabled.
+                    let new_avg = if adjust && cur_shares > 0.0 {
                         ((cur_shares * cur_avg_cost - total_amount) / cur_shares).max(0.0)
                     } else {
                         cur_avg_cost
                     };
                     (cur_shares, new_avg)
                 } else {
-                    // SELL: shares decrease; sale proceeds reduce total cost basis (net cost method).
+                    // SELL: shares always decrease.
+                    // Adjust avg_cost (net cost method) only when the market setting is enabled.
                     let remaining = cur_shares - shares;
-                    let new_avg = if remaining > 0.0 {
-                        ((cur_shares * cur_avg_cost - total_amount) / remaining).max(0.0)
+                    let new_avg = if adjust {
+                        if remaining > 0.0 {
+                            ((cur_shares * cur_avg_cost - total_amount) / remaining).max(0.0)
+                        } else {
+                            0.0
+                        }
                     } else {
-                        0.0
+                        cur_avg_cost
                     };
                     (remaining, new_avg)
                 };

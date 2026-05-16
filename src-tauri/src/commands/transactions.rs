@@ -1,5 +1,6 @@
 use crate::db::Database;
 use crate::models::Transaction;
+use crate::services::quote_provider_service::market_adjusts_sell_pay_cost;
 use crate::services::quote_service::{cash_display_name, CASH_SYMBOL_PREFIX};
 use tauri::State;
 
@@ -130,6 +131,8 @@ pub fn create_transaction(
                 ));
             }
 
+            let adjust = market_adjusts_sell_pay_cost(&conn, &market);
+
             let (new_shares, new_avg_cost) = if transaction_type == "BUY" {
                 let total_shares = current_shares + shares;
                 let new_avg = if total_shares > 0.0 {
@@ -139,20 +142,26 @@ pub fn create_transaction(
                 };
                 (total_shares, new_avg)
             } else if transaction_type == "PAY" {
-                // Dividend: shares unchanged; avg_cost reduced by dividend amount per share.
-                let new_avg = if current_shares > 0.0 {
+                // Dividend: shares unchanged.
+                // Adjust avg_cost only when the market setting is enabled.
+                let new_avg = if adjust && current_shares > 0.0 {
                     ((current_shares * current_avg_cost - total_amount) / current_shares).max(0.0)
                 } else {
                     current_avg_cost
                 };
                 (current_shares, new_avg)
             } else {
-                // SELL: shares decrease; sale proceeds reduce total cost basis (net cost method).
+                // SELL: shares always decrease.
+                // Adjust avg_cost (net cost method) only when the market setting is enabled.
                 let remaining = current_shares - shares;
-                let new_avg = if remaining > 0.0 {
-                    ((current_shares * current_avg_cost - total_amount) / remaining).max(0.0)
+                let new_avg = if adjust {
+                    if remaining > 0.0 {
+                        ((current_shares * current_avg_cost - total_amount) / remaining).max(0.0)
+                    } else {
+                        0.0
+                    }
                 } else {
-                    0.0
+                    current_avg_cost
                 };
                 (remaining, new_avg)
             };
@@ -342,6 +351,8 @@ pub fn update_transaction(
                 )
                 .map_err(|e| e.to_string())?;
 
+            let old_adjust = market_adjusts_sell_pay_cost(&conn, &old_txn.market);
+
             let (rev_shares, rev_avg_cost) = if old_txn.transaction_type == "BUY" {
                 // Reverse a BUY: subtract shares
                 let new_shares = cur_shares - old_txn.shares;
@@ -353,17 +364,19 @@ pub fn update_transaction(
                 };
                 (new_shares, new_avg)
             } else if old_txn.transaction_type == "PAY" {
-                // Reverse a dividend: add back dividend amount to total cost.
-                let rev_avg = if cur_shares > 0.0 {
+                // Reverse a dividend: add back dividend amount to total cost only if
+                // the market setting was enabled when the dividend was recorded.
+                let rev_avg = if old_adjust && cur_shares > 0.0 {
                     (cur_shares * cur_avg_cost + old_txn.total_amount) / cur_shares
                 } else {
                     cur_avg_cost
                 };
                 (cur_shares, rev_avg)
             } else {
-                // Reverse a SELL: add shares back; add sale proceeds back to total cost (net cost method).
+                // Reverse a SELL: add shares back.
+                // Undo the net-cost adjustment only if the market setting is enabled.
                 let new_shares = cur_shares + old_txn.shares;
-                let rev_avg = if new_shares > 0.0 {
+                let rev_avg = if old_adjust && new_shares > 0.0 {
                     (cur_shares * cur_avg_cost + old_txn.total_amount) / new_shares
                 } else {
                     cur_avg_cost
@@ -408,6 +421,8 @@ pub fn update_transaction(
                 ));
             }
 
+            let adjust = market_adjusts_sell_pay_cost(&conn, &market);
+
             let (new_shares, new_avg_cost) = if transaction_type == "BUY" {
                 let total_shares = cur_shares + shares;
                 let new_avg = if total_shares > 0.0 {
@@ -417,20 +432,26 @@ pub fn update_transaction(
                 };
                 (total_shares, new_avg)
             } else if transaction_type == "PAY" {
-                // Dividend: shares unchanged; avg_cost reduced by dividend per share
-                let new_avg = if cur_shares > 0.0 {
+                // Dividend: shares unchanged.
+                // Adjust avg_cost only when the market setting is enabled.
+                let new_avg = if adjust && cur_shares > 0.0 {
                     ((cur_shares * cur_avg_cost - total_amount) / cur_shares).max(0.0)
                 } else {
                     cur_avg_cost
                 };
                 (cur_shares, new_avg)
             } else {
-                // SELL: shares decrease; sale proceeds reduce total cost basis (net cost method).
+                // SELL: shares always decrease.
+                // Adjust avg_cost (net cost method) only when the market setting is enabled.
                 let remaining = cur_shares - shares;
-                let new_avg = if remaining > 0.0 {
-                    ((cur_shares * cur_avg_cost - total_amount) / remaining).max(0.0)
+                let new_avg = if adjust {
+                    if remaining > 0.0 {
+                        ((cur_shares * cur_avg_cost - total_amount) / remaining).max(0.0)
+                    } else {
+                        0.0
+                    }
                 } else {
-                    0.0
+                    cur_avg_cost
                 };
                 (remaining, new_avg)
             };
@@ -523,6 +544,7 @@ pub fn delete_transaction(db: State<Database>, id: String) -> Result<(), String>
                 |row| Ok((row.get(0)?, row.get(1)?)),
             );
             if let Ok((cur_shares, cur_avg_cost)) = holding_data {
+                let adjust = market_adjusts_sell_pay_cost(&conn, &txn.market);
                 let (rev_shares, rev_avg_cost) = if txn.transaction_type == "BUY" {
                     // Reverse a BUY: subtract shares
                     let new_shares = cur_shares - txn.shares;
@@ -534,17 +556,17 @@ pub fn delete_transaction(db: State<Database>, id: String) -> Result<(), String>
                     };
                     (new_shares, new_avg)
                 } else if txn.transaction_type == "PAY" {
-                    // Reverse a dividend: add back dividend amount to avg_cost
-                    let rev_avg = if cur_shares > 0.0 {
+                    // Reverse a dividend: add back dividend amount to avg_cost only if enabled.
+                    let rev_avg = if adjust && cur_shares > 0.0 {
                         (cur_shares * cur_avg_cost + txn.total_amount) / cur_shares
                     } else {
                         cur_avg_cost
                     };
                     (cur_shares, rev_avg)
                 } else {
-                    // Reverse a SELL: add shares back; add sale proceeds back to total cost (net cost method).
+                    // Reverse a SELL: add shares back; undo net-cost adjustment only if enabled.
                     let new_shares = cur_shares + txn.shares;
-                    let rev_avg = if new_shares > 0.0 {
+                    let rev_avg = if adjust && new_shares > 0.0 {
                         (cur_shares * cur_avg_cost + txn.total_amount) / new_shares
                     } else {
                         cur_avg_cost
@@ -577,4 +599,124 @@ pub fn delete_transaction(db: State<Database>, id: String) -> Result<(), String>
             Err(e)
         }
     }
+}
+
+/// Recalculate `shares` and `avg_cost` for every non-cash holding from scratch
+/// by replaying all its transactions in chronological order, honouring the
+/// current per-market cost-adjustment settings.
+///
+/// Call this after changing the per-market SELL/PAY cost-adjustment toggles so
+/// that historical positions reflect the new policy.
+#[tauri::command(rename_all = "camelCase")]
+pub fn recalculate_holdings_cost(db: State<Database>) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    // Read per-market settings once.
+    let cn_adjust = market_adjusts_sell_pay_cost(&conn, "CN");
+    let us_adjust = market_adjusts_sell_pay_cost(&conn, "US");
+    let hk_adjust = market_adjusts_sell_pay_cost(&conn, "HK");
+
+    // Fetch all non-cash holdings: (id, market).
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, market FROM holdings \
+             WHERE symbol NOT LIKE '$CASH-%' \
+             ORDER BY id",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let holdings: Vec<(String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<_, _>>()
+        .map_err(|e: rusqlite::Error| e.to_string())?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    for (holding_id, market) in holdings {
+        let adjust = match market.as_str() {
+            "CN" => cn_adjust,
+            "US" => us_adjust,
+            "HK" => hk_adjust,
+            _ => true,
+        };
+
+        // Load all transactions for this holding, oldest first.
+        let mut tx_stmt = conn
+            .prepare(
+                "SELECT transaction_type, shares, price, total_amount \
+                 FROM transactions \
+                 WHERE holding_id = ?1 \
+                 ORDER BY traded_at ASC, created_at ASC",
+            )
+            .map_err(|e| e.to_string())?;
+
+        struct TxRow {
+            tx_type: String,
+            shares: f64,
+            price: f64,
+            total_amount: f64,
+        }
+
+        let txs: Vec<TxRow> = tx_stmt
+            .query_map(rusqlite::params![holding_id], |row| {
+                Ok(TxRow {
+                    tx_type: row.get(0)?,
+                    shares: row.get(1)?,
+                    price: row.get(2)?,
+                    total_amount: row.get(3)?,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<_, _>>()
+            .map_err(|e: rusqlite::Error| e.to_string())?;
+
+        let mut shares: f64 = 0.0;
+        let mut avg_cost: f64 = 0.0;
+
+        for tx in txs {
+            match tx.tx_type.as_str() {
+                "OPEN" => {
+                    // Initial position entry: set state directly.
+                    shares = tx.shares;
+                    avg_cost = if tx.price > 0.0 { tx.price } else { avg_cost };
+                }
+                "BUY" => {
+                    let new_total = shares + tx.shares;
+                    if new_total > 0.0 {
+                        avg_cost =
+                            (shares * avg_cost + tx.shares * tx.price) / new_total;
+                    }
+                    shares = new_total;
+                }
+                "SELL" => {
+                    let remaining = shares - tx.shares;
+                    if adjust {
+                        avg_cost = if remaining > 0.0 {
+                            ((shares * avg_cost - tx.total_amount) / remaining).max(0.0)
+                        } else {
+                            0.0
+                        };
+                    }
+                    shares = remaining;
+                }
+                "PAY" => {
+                    if adjust && shares > 0.0 {
+                        avg_cost =
+                            ((shares * avg_cost - tx.total_amount) / shares).max(0.0);
+                    }
+                    // shares unchanged for PAY
+                }
+                _ => {}
+            }
+        }
+
+        conn.execute(
+            "UPDATE holdings SET shares = ?2, avg_cost = ?3, updated_at = ?4 WHERE id = ?1",
+            rusqlite::params![holding_id, shares, avg_cost, now],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
