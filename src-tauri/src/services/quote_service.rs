@@ -12,9 +12,6 @@ use std::time::{Duration, Instant};
 /// Cash symbols follow the pattern `$CASH-{CURRENCY}`, e.g. `$CASH-USD`, `$CASH-CNY`, `$CASH-HKD`.
 pub const CASH_SYMBOL_PREFIX: &str = "$CASH-";
 
-/// All recognised cash symbols.
-pub const CASH_SYMBOLS: [&str; 3] = ["$CASH-USD", "$CASH-CNY", "$CASH-HKD"];
-
 /// Returns `true` if the symbol represents a cash holding.
 pub fn is_cash_symbol(symbol: &str) -> bool {
     symbol.starts_with(CASH_SYMBOL_PREFIX)
@@ -72,7 +69,7 @@ pub fn make_cash_quote(symbol: &str, market: &str) -> StockQuote {
 
 struct CachedQuote {
     quote: StockQuote,
-    cached_at: Instant,
+    _cached_at: Instant,
 }
 
 /// In-memory cache for stock quotes, keyed by symbol.
@@ -107,7 +104,7 @@ impl QuoteCache {
             quote.symbol.clone(),
             CachedQuote {
                 quote,
-                cached_at: Instant::now(),
+                _cached_at: Instant::now(),
             },
         );
     }
@@ -121,7 +118,7 @@ impl QuoteCache {
                 q.symbol.clone(),
                 CachedQuote {
                     quote: q.clone(),
-                    cached_at: now,
+                    _cached_at: now,
                 },
             );
         }
@@ -214,19 +211,6 @@ fn deduplicate_symbols(symbols: Vec<(String, String)>) -> Vec<(String, String)> 
         .into_iter()
         .filter(|(symbol, _)| seen.insert(symbol.clone()))
         .collect()
-}
-
-/// Batch fetch quotes using the cache. Only fetches symbols that are
-/// missing from the cache, and updates the cache with fresh results.
-/// Falls back to stale cache entries on network errors for individual symbols.
-/// When `force_refresh` is true the cache is bypassed and all symbols are
-/// fetched from the upstream API.
-pub async fn fetch_quotes_batch_cached(
-    cache: &QuoteCache,
-    symbols: Vec<(String, String)>,
-    force_refresh: bool,
-) -> Result<Vec<StockQuote>, String> {
-    fetch_quotes_batch_cached_with_providers(cache, symbols, "yahoo", "yahoo", "eastmoney", force_refresh).await
 }
 
 /// Batch fetch quotes using the cache with specified providers.
@@ -411,6 +395,7 @@ pub async fn fetch_yahoo_quote(symbol: &str, market: &str) -> Result<StockQuote,
 }
 
 /// Fetch a US stock quote using the configured provider.
+#[cfg(test)]
 pub async fn fetch_us_quote(symbol: &str) -> Result<StockQuote, String> {
     fetch_us_quote_with_provider(symbol, "eastmoney").await
 }
