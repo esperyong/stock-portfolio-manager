@@ -5,9 +5,11 @@ use crate::models::quarterly::{
     QuarterlySnapshot, QuarterlySnapshotDetail, QuarterlyTrends, StockTransactionGroup,
 };
 use crate::models::transaction::Transaction;
-use crate::services::exchange_rate_service::{convert_currency, get_cached_rates, ExchangeRateCache};
-use crate::services::quote_service::{fetch_quotes_batch_cached_with_providers, QuoteCache};
+use crate::services::exchange_rate_service::{
+    convert_currency, get_cached_rates, ExchangeRateCache,
+};
 use crate::services::quote_provider_service;
+use crate::services::quote_service::{fetch_quotes_batch_cached_with_providers, QuoteCache};
 use chrono::{Datelike, NaiveDate, Utc};
 use std::collections::HashMap;
 
@@ -140,17 +142,24 @@ pub async fn create_quarterly_snapshot(
 
     // Fetch prices: try to get close prices from daily_holding_snapshots around the snapshot date,
     // fall back to live quotes.
-    let price_map = get_prices_for_date(db, quote_cache, &rows.iter().map(|r| r.symbol.clone()).collect(), snapshot_date).await?;
+    let price_map = get_prices_for_date(
+        db,
+        quote_cache,
+        &rows.iter().map(|r| r.symbol.clone()).collect(),
+        snapshot_date,
+    )
+    .await?;
 
     // Fetch exchange rates
-    let rates = get_cached_rates(cache, db).await.unwrap_or_else(|_| {
-        crate::models::quote::ExchangeRates {
-            usd_cny: 7.2,
-            usd_hkd: 7.8,
-            cny_hkd: 7.8 / 7.2,
-            updated_at: Utc::now().to_rfc3339(),
-        }
-    });
+    let rates =
+        get_cached_rates(cache, db)
+            .await
+            .unwrap_or_else(|_| crate::models::quote::ExchangeRates {
+                usd_cny: 7.2,
+                usd_hkd: 7.8,
+                cny_hkd: 7.8 / 7.2,
+                updated_at: Utc::now().to_rfc3339(),
+            });
 
     let mut us_value = 0.0f64;
     let mut us_cost = 0.0f64;
@@ -236,10 +245,20 @@ pub async fn create_quarterly_snapshot(
               exchange_rates, overall_notes, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL, ?14)",
             rusqlite::params![
-                snapshot_id, quarter_str, snapshot_date_str,
-                total_value, total_cost, total_pnl,
-                us_value, us_cost, cn_value, cn_cost, hk_value, hk_cost,
-                rates_json, created_at
+                snapshot_id,
+                quarter_str,
+                snapshot_date_str,
+                total_value,
+                total_cost,
+                total_pnl,
+                us_value,
+                us_cost,
+                cn_value,
+                cn_cost,
+                hk_value,
+                hk_cost,
+                rates_json,
+                created_at
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -364,16 +383,20 @@ async fn get_prices_for_date(
         };
         let sym_market_pairs: Vec<(String, String)> = missing
             .iter()
-            .filter_map(|s| {
-                market_map
-                    .get(s)
-                    .map(|m| (s.clone(), m.clone()))
-            })
+            .filter_map(|s| market_map.get(s).map(|m| (s.clone(), m.clone())))
             .collect();
         if !sym_market_pairs.is_empty() {
             let quotes = {
                 let config = quote_provider_service::get_quote_provider_config(db)?;
-                fetch_quotes_batch_cached_with_providers(quote_cache, sym_market_pairs, &config.us_provider, &config.hk_provider, &config.cn_provider, true).await?
+                fetch_quotes_batch_cached_with_providers(
+                    quote_cache,
+                    sym_market_pairs,
+                    &config.us_provider,
+                    &config.hk_provider,
+                    &config.cn_provider,
+                    true,
+                )
+                .await?
             };
             for q in quotes {
                 price_map.insert(q.symbol, q.current_price);
@@ -516,13 +539,22 @@ pub fn get_quarterly_snapshot_detail(
     // Compute holding changes vs previous quarter
     let prev_q = previous_quarter(&snapshot.quarter).ok();
     let holding_changes = prev_q.as_ref().and_then(|pq| {
-        load_holdings_for_quarter(db, pq).ok().map(|prev_holdings| {
-            compute_holding_changes(&prev_holdings, &holdings)
-        })
+        load_holdings_for_quarter(db, pq)
+            .ok()
+            .map(|prev_holdings| compute_holding_changes(&prev_holdings, &holdings))
     });
-    let previous_quarter = if holding_changes.is_some() { prev_q } else { None };
+    let previous_quarter = if holding_changes.is_some() {
+        prev_q
+    } else {
+        None
+    };
 
-    Ok(QuarterlySnapshotDetail { snapshot, holdings, holding_changes, previous_quarter })
+    Ok(QuarterlySnapshotDetail {
+        snapshot,
+        holdings,
+        holding_changes,
+        previous_quarter,
+    })
 }
 
 /// Delete a quarterly snapshot and its holding details.
@@ -542,9 +574,16 @@ pub fn delete_quarterly_snapshot(db: &Database, snapshot_id: &str) -> Result<boo
     Ok(rows > 0)
 }
 
-/// Refresh closing prices in a quarterly snapshot.
-/// - Past quarter: prices are updated to the last trading day of that quarter.
-/// - Current quarter: prices are updated to current live quotes.
+/// Refresh a quarterly snapshot.
+///
+/// **Current quarter**: re-syncs the full position list from the live
+/// `holdings` table (adds new holdings, removes fully-sold ones, updates
+/// shares/avg_cost) then reprices with live quotes.  Per-holding notes
+/// written by the user are preserved for symbols that still exist.
+///
+/// **Past quarters**: prices (close_price, market_value, pnl, weight) are
+/// updated to the quarter-end closing price for every existing holding row.
+/// Holdings (shares, avg_cost, symbol list) are never modified.
 pub async fn refresh_quarterly_snapshot(
     db: &Database,
     cache: &ExchangeRateCache,
@@ -552,43 +591,165 @@ pub async fn refresh_quarterly_snapshot(
     snapshot_id: &str,
 ) -> Result<QuarterlySnapshotDetail, String> {
     // 1. Read existing snapshot header
-    let (quarter_str, exchange_rates_json, _overall_notes) = {
+    let (quarter_str, exchange_rates_json) = {
         let conn = db.conn.lock().map_err(|e| e.to_string())?;
         conn.query_row(
-            "SELECT quarter, exchange_rates, overall_notes FROM quarterly_snapshots WHERE id = ?1",
+            "SELECT quarter, exchange_rates FROM quarterly_snapshots WHERE id = ?1",
             rusqlite::params![snapshot_id],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?)),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
         .map_err(|e| format!("Snapshot not found: {}", e))?
     };
 
-    // 2. Read all holding snapshots
-    struct HoldingInfo {
-        id: String,
+    // 2. Determine if current or past quarter
+    let today = Utc::now().date_naive();
+    let current_quarter = date_to_quarter(today);
+    let (year, q) = parse_quarter(&quarter_str)?;
+    let end_date = quarter_end_date(year, q);
+    let is_current = quarter_str == current_quarter;
+
+    // ── Shared types ────────────────────────────────────────────────────────
+
+    struct WorkingHolding {
+        account_id: String,
+        account_name: String,
         symbol: String,
+        name: String,
         market: String,
+        category_name: String,
+        category_color: String,
         shares: f64,
         avg_cost: f64,
+        notes: Option<String>,
     }
-    let holdings: Vec<HoldingInfo> = {
+
+    // ── 3. Build the working holding list ──────────────────────────────────
+
+    let holdings: Vec<WorkingHolding> = if is_current {
+        // For the current quarter: authoritative source is the live `holdings`
+        // table.  We preserve any per-holding notes the user has already written.
+
+        // 3a. Collect existing notes keyed by symbol
+        let existing_notes: HashMap<String, Option<String>> = {
+            let conn = db.conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT symbol, notes FROM quarterly_holding_snapshots
+                     WHERE quarterly_snapshot_id = ?1",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(rusqlite::params![snapshot_id], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+                })
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<HashMap<_, _>, _>>()
+                .map_err(|e| e.to_string())?
+        };
+
+        // 3b. Read live positions into owned tuples, then map to WorkingHolding.
+        let live_rows: Vec<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            f64,
+            f64,
+        )> = {
+            let conn = db.conn.lock().map_err(|e| e.to_string())?;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT h.account_id, COALESCE(a.name, '') AS account_name,
+                            h.symbol, h.name, h.market,
+                            COALESCE(c.name, '未分类') AS category_name,
+                            COALESCE(c.color, '#8B8B8B') AS category_color,
+                            h.shares, h.avg_cost
+                     FROM holdings h
+                     LEFT JOIN accounts a ON h.account_id = a.id
+                     LEFT JOIN categories c ON h.category_id = c.id
+                     WHERE h.shares > 0
+                     ORDER BY h.market, h.symbol",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?, // account_id
+                        row.get::<_, String>(1)?, // account_name
+                        row.get::<_, String>(2)?, // symbol
+                        row.get::<_, String>(3)?, // name
+                        row.get::<_, String>(4)?, // market
+                        row.get::<_, String>(5)?, // category_name
+                        row.get::<_, String>(6)?, // category_color
+                        row.get::<_, f64>(7)?,    // shares
+                        row.get::<_, f64>(8)?,    // avg_cost
+                    ))
+                })
+                .map_err(|e| e.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?
+        };
+        live_rows
+            .into_iter()
+            .map(
+                |(
+                    account_id,
+                    account_name,
+                    symbol,
+                    name,
+                    market,
+                    category_name,
+                    category_color,
+                    shares,
+                    avg_cost,
+                )| {
+                    let notes = existing_notes.get(&symbol).cloned().flatten();
+                    WorkingHolding {
+                        account_id,
+                        account_name,
+                        symbol,
+                        name,
+                        market,
+                        category_name,
+                        category_color,
+                        shares,
+                        avg_cost,
+                        notes,
+                    }
+                },
+            )
+            .collect()
+    } else {
+        // For past quarters: holdings are frozen — only prices will be updated.
+        // Read the existing snapshot rows exactly as they are.
         let conn = db.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, symbol, market, shares, avg_cost
+                "SELECT account_id, account_name, symbol, name, market,
+                        category_name, category_color, shares, avg_cost, notes
                  FROM quarterly_holding_snapshots
                  WHERE quarterly_snapshot_id = ?1",
             )
             .map_err(|e| e.to_string())?;
-        let rows = stmt.query_map(rusqlite::params![snapshot_id], |row| {
-            Ok(HoldingInfo {
-                id: row.get(0)?,
-                symbol: row.get(1)?,
-                market: row.get(2)?,
-                shares: row.get(3)?,
-                avg_cost: row.get(4)?,
+        let rows = stmt
+            .query_map(rusqlite::params![snapshot_id], |row| {
+                Ok(WorkingHolding {
+                    account_id: row.get(0)?,
+                    account_name: row.get(1)?,
+                    symbol: row.get(2)?,
+                    name: row.get(3)?,
+                    market: row.get(4)?,
+                    category_name: row.get(5)?,
+                    category_color: row.get(6)?,
+                    shares: row.get(7)?,
+                    avg_cost: row.get(8)?,
+                    notes: row.get(9)?,
+                })
             })
-        })
-        .map_err(|e| e.to_string())?;
+            .map_err(|e| e.to_string())?;
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?
     };
@@ -597,17 +758,8 @@ pub async fn refresh_quarterly_snapshot(
         return get_quarterly_snapshot_detail(db, snapshot_id);
     }
 
-    // 3. Determine if current or past quarter
-    let today = Utc::now().date_naive();
-    let current_quarter = date_to_quarter(today);
-    let (year, q) = parse_quarter(&quarter_str)?;
-    let end_date = quarter_end_date(year, q);
-    let is_current = quarter_str == current_quarter;
-
-    // 4. Fetch new prices
-    let symbols: Vec<String> = holdings.iter().map(|h| h.symbol.clone()).collect();
-    let price_map = if is_current {
-        // Current quarter: fetch live quotes
+    // 4. Fetch prices
+    let price_map: HashMap<String, f64> = if is_current {
         let sym_market_pairs: Vec<(String, String)> = holdings
             .iter()
             .map(|h| (h.symbol.clone(), h.market.clone()))
@@ -630,23 +782,23 @@ pub async fn refresh_quarterly_snapshot(
         }
         pm
     } else {
-        // Past quarter: fetch prices at quarter end date
+        let symbols: Vec<String> = holdings.iter().map(|h| h.symbol.clone()).collect();
         get_prices_for_date(db, quote_cache, &symbols, end_date).await?
     };
 
-    // 5. Refresh exchange rates for current quarter, keep existing for past
+    // 5. Exchange rates
     let rates: crate::models::quote::ExchangeRates = if is_current {
         get_cached_rates(cache, db).await.unwrap_or_else(|_| {
-            // Fall back to stored rates
-            serde_json::from_str(&exchange_rates_json).unwrap_or(crate::models::quote::ExchangeRates {
-                usd_cny: 7.2,
-                usd_hkd: 7.8,
-                cny_hkd: 7.8 / 7.2,
-                updated_at: Utc::now().to_rfc3339(),
-            })
+            serde_json::from_str(&exchange_rates_json).unwrap_or(
+                crate::models::quote::ExchangeRates {
+                    usd_cny: 7.2,
+                    usd_hkd: 7.8,
+                    cny_hkd: 7.8 / 7.2,
+                    updated_at: Utc::now().to_rfc3339(),
+                },
+            )
         })
     } else {
-        // Keep existing exchange rates for past quarters
         serde_json::from_str(&exchange_rates_json).unwrap_or(crate::models::quote::ExchangeRates {
             usd_cny: 7.2,
             usd_hkd: 7.8,
@@ -655,7 +807,7 @@ pub async fn refresh_quarterly_snapshot(
         })
     };
 
-    // 6. Recalculate values
+    // 6. Compute values
     let mut us_value = 0.0f64;
     let mut us_cost = 0.0f64;
     let mut cn_value = 0.0f64;
@@ -663,9 +815,8 @@ pub async fn refresh_quarterly_snapshot(
     let mut hk_value = 0.0f64;
     let mut hk_cost = 0.0f64;
 
-    struct UpdateRow {
-        id: String,
-        market: String,
+    struct ComputedRow<'a> {
+        holding: &'a WorkingHolding,
         close_price: f64,
         market_value: f64,
         cost_value: f64,
@@ -673,7 +824,7 @@ pub async fn refresh_quarterly_snapshot(
         pnl_percent: f64,
     }
 
-    let mut updates: Vec<UpdateRow> = Vec::new();
+    let mut computed: Vec<ComputedRow> = Vec::new();
 
     for h in &holdings {
         let close_price = *price_map.get(&h.symbol).unwrap_or(&0.0);
@@ -702,9 +853,8 @@ pub async fn refresh_quarterly_snapshot(
             _ => {}
         }
 
-        updates.push(UpdateRow {
-            id: h.id.clone(),
-            market: h.market.clone(),
+        computed.push(ComputedRow {
+            holding: h,
             close_price,
             market_value,
             cost_value,
@@ -728,35 +878,95 @@ pub async fn refresh_quarterly_snapshot(
         end_date.format("%Y-%m-%d").to_string()
     };
 
-    // 7. Update DB in a transaction
+    // 7. Persist
     {
         let mut conn = db.conn.lock().map_err(|e| e.to_string())?;
         let tx = conn.transaction().map_err(|e| e.to_string())?;
 
-        // Update holding snapshots
-        for u in &updates {
-            let weight = if total_value != 0.0 {
-                let mv_usd = match u.market.as_str() {
-                    "CN" => convert_currency(u.market_value, "CNY", "USD", &rates),
-                    "HK" => convert_currency(u.market_value, "HKD", "USD", &rates),
-                    _ => u.market_value,
-                };
-                mv_usd / total_value * 100.0
-            } else {
-                0.0
-            };
-
+        if is_current {
+            // Replace all holding rows so the list is fully in sync with live holdings.
             tx.execute(
-                "UPDATE quarterly_holding_snapshots
-                 SET close_price = ?1, market_value = ?2, cost_value = ?3,
-                     pnl = ?4, pnl_percent = ?5, weight = ?6
-                 WHERE id = ?7",
-                rusqlite::params![
-                    u.close_price, u.market_value, u.cost_value,
-                    u.pnl, u.pnl_percent, weight, u.id
-                ],
+                "DELETE FROM quarterly_holding_snapshots WHERE quarterly_snapshot_id = ?1",
+                rusqlite::params![snapshot_id],
             )
             .map_err(|e| e.to_string())?;
+
+            for c in &computed {
+                let weight = if total_value != 0.0 {
+                    let mv_usd = match c.holding.market.as_str() {
+                        "CN" => convert_currency(c.market_value, "CNY", "USD", &rates),
+                        "HK" => convert_currency(c.market_value, "HKD", "USD", &rates),
+                        _ => c.market_value,
+                    };
+                    mv_usd / total_value * 100.0
+                } else {
+                    0.0
+                };
+                let new_id = uuid::Uuid::new_v4().to_string();
+                tx.execute(
+                    "INSERT INTO quarterly_holding_snapshots
+                     (id, quarterly_snapshot_id, account_id, account_name, symbol, name, market,
+                      category_name, category_color, shares, avg_cost, close_price, market_value,
+                      cost_value, pnl, pnl_percent, weight, notes)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+                    rusqlite::params![
+                        new_id,
+                        snapshot_id,
+                        c.holding.account_id,
+                        c.holding.account_name,
+                        c.holding.symbol,
+                        c.holding.name,
+                        c.holding.market,
+                        c.holding.category_name,
+                        c.holding.category_color,
+                        c.holding.shares,
+                        c.holding.avg_cost,
+                        c.close_price,
+                        c.market_value,
+                        c.cost_value,
+                        c.pnl,
+                        c.pnl_percent,
+                        weight,
+                        c.holding.notes
+                    ],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        } else {
+            // Past quarter: holdings are frozen — only update the price-derived
+            // fields on each existing row. No INSERT or DELETE of holding rows.
+            for c in &computed {
+                let weight = if total_value != 0.0 {
+                    let mv_usd = match c.holding.market.as_str() {
+                        "CN" => convert_currency(c.market_value, "CNY", "USD", &rates),
+                        "HK" => convert_currency(c.market_value, "HKD", "USD", &rates),
+                        _ => c.market_value,
+                    };
+                    mv_usd / total_value * 100.0
+                } else {
+                    0.0
+                };
+                tx.execute(
+                    "UPDATE quarterly_holding_snapshots
+                     SET close_price = ?1, market_value = ?2, cost_value = ?3,
+                         pnl = ?4, pnl_percent = ?5, weight = ?6
+                     WHERE quarterly_snapshot_id = ?7
+                       AND account_id = ?8
+                       AND symbol = ?9",
+                    rusqlite::params![
+                        c.close_price,
+                        c.market_value,
+                        c.cost_value,
+                        c.pnl,
+                        c.pnl_percent,
+                        weight,
+                        snapshot_id,
+                        c.holding.account_id,
+                        c.holding.symbol,
+                    ],
+                )
+                .map_err(|e| e.to_string())?;
+            }
         }
 
         // Update snapshot header
@@ -767,9 +977,18 @@ pub async fn refresh_quarterly_snapshot(
                  hk_value = ?9, hk_cost = ?10, exchange_rates = ?11
              WHERE id = ?12",
             rusqlite::params![
-                snapshot_date_str, total_value, total_cost, total_pnl,
-                us_value, us_cost, cn_value, cn_cost,
-                hk_value, hk_cost, rates_json, snapshot_id
+                snapshot_date_str,
+                total_value,
+                total_cost,
+                total_pnl,
+                us_value,
+                us_cost,
+                cn_value,
+                cn_cost,
+                hk_value,
+                hk_cost,
+                rates_json,
+                snapshot_id
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -786,11 +1005,9 @@ pub fn check_missing_snapshots(db: &Database) -> Result<Vec<String>, String> {
     // Find the earliest transaction date
     let earliest: Option<String> = {
         let conn = db.conn.lock().map_err(|e| e.to_string())?;
-        conn.query_row(
-            "SELECT MIN(DATE(traded_at)) FROM transactions",
-            [],
-            |row| row.get(0),
-        )
+        conn.query_row("SELECT MIN(DATE(traded_at)) FROM transactions", [], |row| {
+            row.get(0)
+        })
         .ok()
         .flatten()
     };
@@ -869,8 +1086,16 @@ pub fn compare_quarters(
         q2_total_cost: snap2.total_cost,
         q1_pnl: snap1.total_pnl,
         q2_pnl: snap2.total_pnl,
-        q1_holding_count: h1.iter().map(|h| h.symbol.as_str()).collect::<std::collections::HashSet<_>>().len(),
-        q2_holding_count: h2.iter().map(|h| h.symbol.as_str()).collect::<std::collections::HashSet<_>>().len(),
+        q1_holding_count: h1
+            .iter()
+            .map(|h| h.symbol.as_str())
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        q2_holding_count: h2
+            .iter()
+            .map(|h| h.symbol.as_str())
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
     };
 
     // By market
@@ -1039,10 +1264,26 @@ fn compute_market_comparison(
     markets
         .iter()
         .map(|m| {
-            let q1_value: f64 = h1.iter().filter(|h| h.market == *m).map(|h| h.market_value).sum();
-            let q1_cost: f64 = h1.iter().filter(|h| h.market == *m).map(|h| h.cost_value).sum();
-            let q2_value: f64 = h2.iter().filter(|h| h.market == *m).map(|h| h.market_value).sum();
-            let q2_cost: f64 = h2.iter().filter(|h| h.market == *m).map(|h| h.cost_value).sum();
+            let q1_value: f64 = h1
+                .iter()
+                .filter(|h| h.market == *m)
+                .map(|h| h.market_value)
+                .sum();
+            let q1_cost: f64 = h1
+                .iter()
+                .filter(|h| h.market == *m)
+                .map(|h| h.cost_value)
+                .sum();
+            let q2_value: f64 = h2
+                .iter()
+                .filter(|h| h.market == *m)
+                .map(|h| h.market_value)
+                .sum();
+            let q2_cost: f64 = h2
+                .iter()
+                .filter(|h| h.market == *m)
+                .map(|h| h.cost_value)
+                .sum();
             let value_change = q2_value - q1_value;
             let value_change_percent = if q1_value != 0.0 {
                 value_change / q1_value * 100.0
@@ -1561,6 +1802,37 @@ pub fn get_quarterly_transactions(
     }
 
     Ok(groups)
+}
+
+/// Check if the current quarter already has a snapshot. If not, create one and return it.
+/// Returns `None` when a snapshot for the current quarter already exists.
+pub async fn ensure_current_quarter_snapshot(
+    db: &Database,
+    cache: &ExchangeRateCache,
+    quote_cache: &QuoteCache,
+) -> Result<Option<QuarterlySnapshot>, String> {
+    let today = Utc::now().date_naive();
+    let current_quarter = date_to_quarter(today);
+
+    // Check whether a snapshot already exists for the current quarter
+    let exists: bool = {
+        let conn = db.conn.lock().map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT COUNT(*) FROM quarterly_snapshots WHERE quarter = ?1",
+            rusqlite::params![current_quarter],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|c| c > 0)
+        .unwrap_or(false)
+    };
+
+    if exists {
+        return Ok(None);
+    }
+
+    // No snapshot yet for this quarter — create one automatically
+    let snapshot = create_quarterly_snapshot(db, cache, quote_cache, Some(current_quarter)).await?;
+    Ok(Some(snapshot))
 }
 
 #[cfg(test)]
