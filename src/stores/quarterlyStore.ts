@@ -123,10 +123,6 @@ export const useQuarterlyStore = create<QuarterlyState>((set, get) => ({
   ensureCurrentQuarterSnapshot: async () => {
     try {
       const snapshot = await invoke<QuarterlySnapshot | null>("ensure_current_quarter_snapshot");
-      if (snapshot) {
-        await get().fetchSnapshots();
-        await get().fetchMissingQuarters();
-      }
       return snapshot;
     } catch (err) {
       console.error("ensureCurrentQuarterSnapshot error:", err);
