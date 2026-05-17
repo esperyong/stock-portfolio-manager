@@ -55,8 +55,8 @@ pub async fn take_daily_snapshot(
         let conn = db.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
             .prepare(
-                "SELECT h.id, h.account_id, h.symbol, h.name, h.market,
-                        h.shares, h.avg_cost, h.currency, c.name as category_name
+                "SELECT h.account_id, h.symbol, h.market,
+                        h.shares, h.avg_cost, c.name as category_name
                  FROM holdings h
                  LEFT JOIN categories c ON h.category_id = c.id
                  WHERE h.shares > 0",
@@ -65,28 +65,22 @@ pub async fn take_daily_snapshot(
 
         #[derive(Debug)]
         struct HoldingRow {
-            id: String,
             account_id: String,
             symbol: String,
-            name: String,
             market: String,
             shares: f64,
             avg_cost: f64,
-            currency: String,
             category_name: Option<String>,
         }
 
         let rows = stmt.query_map([], |row| {
             Ok(HoldingRow {
-                id: row.get(0)?,
-                account_id: row.get(1)?,
-                symbol: row.get(2)?,
-                name: row.get(3)?,
-                market: row.get(4)?,
-                shares: row.get(5)?,
-                avg_cost: row.get(6)?,
-                currency: row.get(7)?,
-                category_name: row.get(8)?,
+                account_id: row.get(0)?,
+                symbol: row.get(1)?,
+                market: row.get(2)?,
+                shares: row.get(3)?,
+                avg_cost: row.get(4)?,
+                category_name: row.get(5)?,
             })
         })
         .map_err(|e| e.to_string())?;
