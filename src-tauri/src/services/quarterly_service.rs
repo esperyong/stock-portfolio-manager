@@ -874,133 +874,35 @@ pub async fn refresh_quarterly_snapshot(
             )
             .collect()
     } else {
-        // For past quarters: recompute positions from transaction history up to
-        // the quarter-end date, preserving any user-written per-holding notes.
-
-        // Preserve existing notes (and full cash rows) from frozen snapshot.
-        // We read all existing rows upfront: cash rows are preserved entirely;
-        // non-cash rows only contribute their notes field.
-        struct FrozenRow {
-            account_id: String,
-            account_name: String,
-            symbol: String,
-            name: String,
-            market: String,
-            category_name: String,
-            category_color: String,
-            shares: f64,
-            avg_cost: f64,
-            notes: Option<String>,
-            is_cash: bool,
-        }
-
-        let frozen_rows: Vec<FrozenRow> = {
-            let conn = db.conn.lock().map_err(|e| e.to_string())?;
-            let mut stmt = conn
-                .prepare(
-                    "SELECT account_id, account_name, symbol, name, market,
-                            category_name, category_color, shares, avg_cost, notes
-                     FROM quarterly_holding_snapshots
-                     WHERE quarterly_snapshot_id = ?1",
-                )
-                .map_err(|e| e.to_string())?;
-            let rows = stmt
-                .query_map(rusqlite::params![snapshot_id], |row| {
-                    let symbol: String = row.get(2)?;
-                    let is_cash = symbol.starts_with(CASH_SYMBOL_PREFIX);
-                    Ok(FrozenRow {
-                        account_id: row.get(0)?,
-                        account_name: row.get(1)?,
-                        symbol,
-                        name: row.get(3)?,
-                        market: row.get(4)?,
-                        category_name: row.get(5)?,
-                        category_color: row.get(6)?,
-                        shares: row.get(7)?,
-                        avg_cost: row.get(8)?,
-                        notes: row.get(9)?,
-                        is_cash,
-                    })
+        // For past quarters: holdings are frozen — only prices will be updated.
+        // Read the existing snapshot rows exactly as they are.
+        let conn = db.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT account_id, account_name, symbol, name, market,
+                        category_name, category_color, shares, avg_cost, notes
+                 FROM quarterly_holding_snapshots
+                 WHERE quarterly_snapshot_id = ?1",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(rusqlite::params![snapshot_id], |row| {
+                Ok(WorkingHolding {
+                    account_id: row.get(0)?,
+                    account_name: row.get(1)?,
+                    symbol: row.get(2)?,
+                    name: row.get(3)?,
+                    market: row.get(4)?,
+                    category_name: row.get(5)?,
+                    category_color: row.get(6)?,
+                    shares: row.get(7)?,
+                    avg_cost: row.get(8)?,
+                    notes: row.get(9)?,
                 })
-                .map_err(|e| e.to_string())?;
-            rows.collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?
-        };
-
-        // Build note-preservation map for non-cash symbols.
-        let existing_notes_past: HashMap<(String, String), Option<String>> = frozen_rows
-            .iter()
-            .filter(|r| !r.is_cash)
-            .map(|r| ((r.account_id.clone(), r.symbol.clone()), r.notes.clone()))
-            .collect();
-
-        // Compute historical non-cash positions from transaction replay.
-        let hist_positions = compute_holdings_at_date(db, end_date)?;
-
-        // Enrich each non-cash position with account_name and category info from
-        // the current DB state (best available approximation for historical data).
-        let mut result: Vec<WorkingHolding> = Vec::new();
-        {
-            let conn = db.conn.lock().map_err(|e| e.to_string())?;
-            for (account_id, symbol, name, market, shares, avg_cost) in hist_positions {
-                let account_name: String = conn
-                    .query_row(
-                        "SELECT COALESCE(name, '') FROM accounts WHERE id = ?1",
-                        rusqlite::params![account_id],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or_default();
-
-                let (category_name, category_color): (String, String) = conn
-                    .query_row(
-                        "SELECT COALESCE(c.name, '未分类'), COALESCE(c.color, '#8B8B8B')
-                         FROM holdings h
-                         LEFT JOIN categories c ON h.category_id = c.id
-                         WHERE h.account_id = ?1 AND h.symbol = ?2
-                         LIMIT 1",
-                        rusqlite::params![account_id, symbol],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
-                    )
-                    .unwrap_or_else(|_| ("未分类".to_string(), "#8B8B8B".to_string()));
-
-                let notes = existing_notes_past
-                    .get(&(account_id.clone(), symbol.clone()))
-                    .cloned()
-                    .flatten();
-
-                result.push(WorkingHolding {
-                    account_id,
-                    account_name,
-                    symbol,
-                    name,
-                    market,
-                    category_name,
-                    category_color,
-                    shares,
-                    avg_cost,
-                    notes,
-                });
-            }
-        }
-
-        // Append the frozen cash holdings so they are included in totals and
-        // are re-inserted into the snapshot (preserving their values exactly).
-        for r in frozen_rows.into_iter().filter(|r| r.is_cash) {
-            result.push(WorkingHolding {
-                account_id: r.account_id,
-                account_name: r.account_name,
-                symbol: r.symbol,
-                name: r.name,
-                market: r.market,
-                category_name: r.category_name,
-                category_color: r.category_color,
-                shares: r.shares,
-                avg_cost: r.avg_cost,
-                notes: r.notes,
-            });
-        }
-
-        result
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
     };
 
     if holdings.is_empty() {
@@ -1182,23 +1084,9 @@ pub async fn refresh_quarterly_snapshot(
                 .map_err(|e| e.to_string())?;
             }
         } else {
-            // Past quarter: positions have been recomputed from transaction history;
-            // replace only the non-cash holding rows with the freshly computed ones.
-            // Cash holdings are preserved from the original frozen snapshot.
-            let cash_like = format!("{}%", CASH_SYMBOL_PREFIX);
-            tx.execute(
-                "DELETE FROM quarterly_holding_snapshots
-                 WHERE quarterly_snapshot_id = ?1 AND symbol NOT LIKE ?2",
-                rusqlite::params![snapshot_id, cash_like],
-            )
-            .map_err(|e| e.to_string())?;
-
+            // Past quarter: holdings are frozen — only update the price-derived
+            // fields on each existing row. No INSERT or DELETE of holding rows.
             for c in &computed {
-                // Cash holdings were preserved in the DB by the targeted DELETE above;
-                // skip re-inserting them to avoid duplicates.
-                if c.holding.symbol.starts_with(CASH_SYMBOL_PREFIX) {
-                    continue;
-                }
                 let weight = if total_value != 0.0 {
                     let mv_usd = match c.holding.market.as_str() {
                         "CN" => convert_currency(c.market_value, "CNY", "USD", &rates),
@@ -1209,32 +1097,23 @@ pub async fn refresh_quarterly_snapshot(
                 } else {
                     0.0
                 };
-                let new_id = uuid::Uuid::new_v4().to_string();
                 tx.execute(
-                    "INSERT INTO quarterly_holding_snapshots
-                     (id, quarterly_snapshot_id, account_id, account_name, symbol, name, market,
-                      category_name, category_color, shares, avg_cost, close_price, market_value,
-                      cost_value, pnl, pnl_percent, weight, notes)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+                    "UPDATE quarterly_holding_snapshots
+                     SET close_price = ?1, market_value = ?2, cost_value = ?3,
+                         pnl = ?4, pnl_percent = ?5, weight = ?6
+                     WHERE quarterly_snapshot_id = ?7
+                       AND account_id = ?8
+                       AND symbol = ?9",
                     rusqlite::params![
-                        new_id,
-                        snapshot_id,
-                        c.holding.account_id,
-                        c.holding.account_name,
-                        c.holding.symbol,
-                        c.holding.name,
-                        c.holding.market,
-                        c.holding.category_name,
-                        c.holding.category_color,
-                        c.holding.shares,
-                        c.holding.avg_cost,
                         c.close_price,
                         c.market_value,
                         c.cost_value,
                         c.pnl,
                         c.pnl_percent,
                         weight,
-                        c.holding.notes
+                        snapshot_id,
+                        c.holding.account_id,
+                        c.holding.symbol,
                     ],
                 )
                 .map_err(|e| e.to_string())?;
