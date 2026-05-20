@@ -351,12 +351,15 @@ export default function HoldingsPage() {
         txns = await invoke<Transaction[]>("get_transactions", {
           accountId: holding.account_id,
         });
-        // Keep only transactions that match the cash currency, and skip OPEN
-        // records for non-cash symbols (those have zero cash impact).
+        // Keep only transactions that match the cash currency, and exclude
+        // synthetic initial-position entries:
+        // - OPEN type records for non-cash symbols (zero cash impact)
+        // - BUY records flagged as 'backfill:initial' (synthetic, no cash impact)
         txns = txns.filter(
           (t) =>
             t.currency === holding.currency &&
-            !(t.transaction_type === "OPEN" && !isCashSymbol(t.symbol)),
+            !(t.transaction_type === "OPEN" && !isCashSymbol(t.symbol)) &&
+            t.notes !== "backfill:initial",
         );
       } else {
         txns = await invoke<Transaction[]>("get_transactions", {
