@@ -354,7 +354,9 @@ export default function HoldingsPage() {
         // Keep only transactions that match the cash currency, and exclude
         // synthetic initial-position entries:
         // - OPEN type records for non-cash symbols (zero cash impact)
-        // - BUY records flagged as 'backfill:initial' (synthetic, no cash impact)
+        // - BUY records flagged as 'backfill:initial': the DB migration in
+        //   db/mod.rs converts these to OPEN on startup, but this filter is
+        //   retained as a fallback in case the migration fails silently.
         txns = txns.filter(
           (t) =>
             t.currency === holding.currency &&

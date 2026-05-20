@@ -306,6 +306,10 @@ impl Database {
         // Convert synthetic BUY records to OPEN type so they are correctly
         // treated as zero-cash-impact position entries everywhere.
         //
+        // These migrations are idempotent (UPDATE with 0 rows is not an error)
+        // and failures are tolerated – if they don't apply, the frontend filter
+        // below provides a fallback by explicitly excluding 'backfill:initial'.
+        //
         // 1. Records created by the backfill_open_transactions tool:
         //    these always carry notes = 'backfill:initial'.
         let _ = conn.execute_batch("
