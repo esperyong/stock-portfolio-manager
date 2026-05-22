@@ -4,6 +4,16 @@ use crate::services::quote_provider_service::market_adjusts_sell_pay_cost;
 use crate::services::quote_service::{cash_display_name, CASH_SYMBOL_PREFIX};
 use tauri::State;
 
+fn validate_transaction_shares(market: &str, shares: f64) -> Result<(), String> {
+    if !shares.is_finite() || shares <= 0.0 {
+        return Err("Transaction shares must be a positive number".to_string());
+    }
+    if market != "US" && shares.fract().abs() > 1e-9 {
+        return Err("Only US transactions support fractional shares; CN and HK transactions must use whole shares".to_string());
+    }
+    Ok(())
+}
+
 /// Compute the cash delta for a transaction.
 /// BUY  → cash decreases by total_amount + commission (money leaves the account).
 /// SELL → cash increases by total_amount - commission (money enters the account).
@@ -83,6 +93,8 @@ pub fn create_transaction(
     traded_at: String,
     notes: Option<String>,
 ) -> Result<Transaction, String> {
+    validate_transaction_shares(&market, shares)?;
+
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -325,6 +337,8 @@ pub fn update_transaction(
     traded_at: String,
     notes: Option<String>,
 ) -> Result<Transaction, String> {
+    validate_transaction_shares(&market, shares)?;
+
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     // Fetch the original transaction to reverse holding impact

@@ -205,6 +205,7 @@ mod tests {
             cn_provider: "eastmoney".to_string(),
             xueqiu_cookie: None,
             xueqiu_u: None,
+            ..Default::default()
         };
         let result = crate::services::quote_provider_service::update_quote_provider_config(&db, &config);
         assert!(result.is_ok());
@@ -224,6 +225,7 @@ mod tests {
             cn_provider: "eastmoney".to_string(),
             xueqiu_cookie: None,
             xueqiu_u: None,
+            ..Default::default()
         };
         let result = crate::services::quote_provider_service::update_quote_provider_config(&db, &config);
         assert!(result.is_err());
@@ -238,6 +240,7 @@ mod tests {
             cn_provider: "yahoo".to_string(),
             xueqiu_cookie: None,
             xueqiu_u: None,
+            ..Default::default()
         };
         let result = crate::services::quote_provider_service::update_quote_provider_config(&db, &config);
         assert!(result.is_err());
@@ -252,6 +255,7 @@ mod tests {
             cn_provider: "eastmoney".to_string(),
             xueqiu_cookie: Some("xq_a_token=abc123".to_string()),
             xueqiu_u: None,
+            ..Default::default()
         };
         let result = crate::services::quote_provider_service::update_quote_provider_config(&db, &config);
         assert!(result.is_ok());
@@ -269,6 +273,7 @@ mod tests {
             cn_provider: "eastmoney".to_string(),
             xueqiu_cookie: None,
             xueqiu_u: Some("9095890697".to_string()),
+            ..Default::default()
         };
         let result = crate::services::quote_provider_service::update_quote_provider_config(&db, &config);
         assert!(result.is_ok());
@@ -286,6 +291,7 @@ mod tests {
             cn_provider: "eastmoney".to_string(),
             xueqiu_cookie: None,
             xueqiu_u: Some("   ".to_string()),
+            ..Default::default()
         };
         let result = crate::services::quote_provider_service::update_quote_provider_config(&db, &config);
         assert!(result.is_ok());

@@ -2575,7 +2575,7 @@ mod tests {
     // ---- Xueqiu response parsing tests ----
 
     fn make_xueqiu_response(
-        symbol: &str,
+        _symbol: &str,
         name: &str,
         current: f64,
         last_close: f64,
@@ -2588,7 +2588,6 @@ mod tests {
         XueqiuResponse {
             data: Some(XueqiuData {
                 quote: Some(XueqiuQuote {
-                    symbol: Some(symbol.to_string()),
                     name: Some(name.to_string()),
                     current: Some(current),
                     last_close: Some(last_close),
@@ -2703,7 +2702,6 @@ mod tests {
         let resp = XueqiuResponse {
             data: Some(XueqiuData {
                 quote: Some(XueqiuQuote {
-                    symbol: Some("SH600519".to_string()),
                     name: Some("贵州茅台".to_string()),
                     current: None,
                     last_close: Some(1690.00),
@@ -2739,7 +2737,6 @@ mod tests {
         let resp = XueqiuResponse {
             data: Some(XueqiuData {
                 quote: Some(XueqiuQuote {
-                    symbol: Some("SH600519".to_string()),
                     name: Some("贵州茅台".to_string()),
                     current: Some(1100.00),
                     last_close: Some(1000.00),
