@@ -327,7 +327,7 @@ export default function HoldingsPage() {
     }
   };
 
-  const handleEdit = (holding: Holding) => {
+  const openEditModal = (holding: Holding) => {
     setEditingHolding(holding);
     form.setFieldsValue({
       accountId: holding.account_id,
@@ -340,6 +340,35 @@ export default function HoldingsPage() {
       currency: holding.currency,
     });
     setModalOpen(true);
+  };
+
+  const handleEdit = async (holding: Holding) => {
+    // Skip warning for cash holdings
+    if (isCashSymbol(holding.symbol)) {
+      openEditModal(holding);
+      return;
+    }
+    try {
+      const txns = await invoke<Transaction[]>("get_transactions", {
+        accountId: holding.account_id,
+        symbol: holding.symbol,
+      });
+      if (txns.length >= 2) {
+        Modal.confirm({
+          title: "编辑提醒",
+          content:
+            "该持仓已有多条交易记录。直接修改持仓股数或平均成本价，可能导致与交易记录计算出的数据不一致。建议前往「交易记录」中添加或导入该持仓的交易记录来更新持仓信息。确定要继续编辑吗？",
+          okText: "继续编辑",
+          cancelText: "取消",
+          onOk: () => openEditModal(holding),
+        });
+      } else {
+        openEditModal(holding);
+      }
+    } catch {
+      // If fetching transactions fails, proceed with editing
+      openEditModal(holding);
+    }
   };
 
   const handleDelete = async (id: string) => {
