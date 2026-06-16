@@ -662,6 +662,7 @@ export interface OptionRecord {
 }
 
 export interface OptionContract {
+  id: string;
   option_symbol: string;
   underlying: string;
   expiry_date: string;

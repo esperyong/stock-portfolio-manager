@@ -22,10 +22,13 @@ import {
   DeleteOutlined,
   DollarOutlined,
   StockOutlined,
+  PlusOutlined,
+  MinusOutlined,
 } from "@ant-design/icons";
 import { useAccountStore } from "../../stores/accountStore";
 import { useOptionStore } from "../../stores/optionStore";
 import type {
+  OptionContract,
   StockPriceInput,
 } from "../../types";
 
@@ -90,6 +93,88 @@ export default function OptionsPage() {
   const expiredContracts = useMemo(
     () => contracts.filter((c) => c.status === "expired"),
     [contracts]
+  );
+
+  // Group contracts by option_symbol for expandable display
+  interface GroupedContract {
+    key: string;
+    option_symbol: string;
+    underlying: string;
+    expiry_date: string;
+    strike_price: number;
+    option_type: string;
+    contracts: number;
+    open_price: number;
+    open_amount: number;
+    commission: number;
+    traded_at: string | null;
+    close_price: number | null;
+    close_code: string | null;
+    status: string;
+    children?: OptionContract[];
+  }
+
+  const groupContracts = useCallback((contractsList: OptionContract[]): GroupedContract[] => {
+    const grouped: Record<string, OptionContract[]> = {};
+    for (const c of contractsList) {
+      if (!grouped[c.option_symbol]) {
+        grouped[c.option_symbol] = [];
+      }
+      grouped[c.option_symbol].push(c);
+    }
+
+    return Object.entries(grouped).map(([symbol, items]) => {
+      if (items.length === 1) {
+        const c = items[0];
+        return {
+          key: c.id,
+          option_symbol: c.option_symbol,
+          underlying: c.underlying,
+          expiry_date: c.expiry_date,
+          strike_price: c.strike_price,
+          option_type: c.option_type,
+          contracts: c.contracts,
+          open_price: c.open_price,
+          open_amount: c.open_amount,
+          commission: c.commission,
+          traded_at: c.traded_at,
+          close_price: c.close_price,
+          close_code: c.close_code,
+          status: c.status,
+        };
+      }
+      // Multiple contracts with same symbol: sum contracts, aggregate amounts
+      const totalContracts = items.reduce((sum, c) => sum + c.contracts, 0);
+      const totalAmount = items.reduce((sum, c) => sum + c.open_amount, 0);
+      const totalCommission = items.reduce((sum, c) => sum + c.commission, 0);
+      const first = items[0];
+      return {
+        key: symbol,
+        option_symbol: symbol,
+        underlying: first.underlying,
+        expiry_date: first.expiry_date,
+        strike_price: first.strike_price,
+        option_type: first.option_type,
+        contracts: totalContracts,
+        open_price: first.open_price,
+        open_amount: totalAmount,
+        commission: totalCommission,
+        traded_at: first.traded_at,
+        close_price: first.close_price,
+        close_code: first.close_code,
+        status: first.status,
+        children: items,
+      };
+    });
+  }, []);
+
+  const groupedActiveContracts = useMemo(
+    () => groupContracts(activeContracts),
+    [activeContracts, groupContracts]
+  );
+  const groupedExpiredContracts = useMemo(
+    () => groupContracts(expiredContracts),
+    [expiredContracts, groupContracts]
   );
 
   // Get unique underlyings from active contracts for price inputs
@@ -275,6 +360,13 @@ export default function OptionsPage() {
         <Text type="secondary">${Math.abs(v).toLocaleString()}</Text>
       ),
     },
+    {
+      title: "交易时间",
+      dataIndex: "traded_at",
+      key: "traded_at",
+      width: 120,
+      render: (v: string | null) => v ? v.substring(0, 10) : "-",
+    },
   ];
 
   // Table columns for expired contracts
@@ -344,12 +436,25 @@ export default function OptionsPage() {
       </Row>
 
       <Table
-        dataSource={activeContracts}
+        dataSource={groupedActiveContracts}
         columns={activeColumns}
-        rowKey="option_symbol"
+        rowKey={(record: any) => record.key || record.id}
         size="small"
         pagination={false}
         style={{ marginBottom: 24 }}
+        expandable={{
+          childrenColumnName: "children",
+          expandIcon: ({ expanded, onExpand, record }) =>
+            record.children ? (
+              expanded ? (
+                <MinusOutlined onClick={(e) => onExpand(record, e)} style={{ cursor: "pointer", marginRight: 8 }} />
+              ) : (
+                <PlusOutlined onClick={(e) => onExpand(record, e)} style={{ cursor: "pointer", marginRight: 8 }} />
+              )
+            ) : (
+              <span style={{ marginRight: 8, width: 14, display: "inline-block" }} />
+            ),
+        }}
       />
 
       {activeUnderlyings.length > 0 && (
@@ -591,11 +696,24 @@ export default function OptionsPage() {
       )}
 
       <Table
-        dataSource={expiredContracts}
+        dataSource={groupedExpiredContracts}
         columns={expiredColumns}
-        rowKey="option_symbol"
+        rowKey={(record: any) => record.key || record.id}
         size="small"
         pagination={false}
+        expandable={{
+          childrenColumnName: "children",
+          expandIcon: ({ expanded, onExpand, record }) =>
+            record.children ? (
+              expanded ? (
+                <MinusOutlined onClick={(e) => onExpand(record, e)} style={{ cursor: "pointer", marginRight: 8 }} />
+              ) : (
+                <PlusOutlined onClick={(e) => onExpand(record, e)} style={{ cursor: "pointer", marginRight: 8 }} />
+              )
+            ) : (
+              <span style={{ marginRight: 8, width: 14, display: "inline-block" }} />
+            ),
+        }}
       />
     </div>
   );

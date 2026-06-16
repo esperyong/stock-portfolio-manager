@@ -24,6 +24,7 @@ pub struct OptionRecord {
 /// A paired option contract with status derived from matching records
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OptionContract {
+    pub id: String,             // unique identifier for this contract instance
     pub option_symbol: String,
     pub underlying: String,
     pub expiry_date: String,

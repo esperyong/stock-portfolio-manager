@@ -497,12 +497,26 @@ fn get_option_contracts_inner(
     }
 
     for (symbol, recs) in &grouped {
-        let open_rec = recs.iter().find(|r| r.action == "SELL" && r.code == "O");
-        let close_rec = recs
+        // Collect all open records (SELL + O) sorted by traded_at
+        let mut opens: Vec<&OptionRecord> = recs
             .iter()
-            .find(|r| r.action == "BUY" && (r.code == "C;Ep" || r.code == "A;C"));
+            .filter(|r| r.action == "SELL" && r.code == "O")
+            .collect();
+        opens.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
 
-        if let Some(open) = open_rec {
+        // Collect all close records (BUY + C;Ep or A;C) sorted by traded_at
+        let mut closes: Vec<&OptionRecord> = recs
+            .iter()
+            .filter(|r| r.action == "BUY" && (r.code == "C;Ep" || r.code == "A;C"))
+            .collect();
+        closes.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
+
+        // Pair each open with a close chronologically (one-to-one match)
+        let mut close_iter = closes.into_iter();
+        for open in &opens {
+            // Find the next close record that comes after this open
+            let close_rec = close_iter.next();
+
             let status = if close_rec.is_some() {
                 "expired".to_string()
             } else {
@@ -510,6 +524,7 @@ fn get_option_contracts_inner(
             };
 
             contracts.push(OptionContract {
+                id: open.id.clone(),
                 option_symbol: symbol.clone(),
                 underlying: open.underlying.clone(),
                 expiry_date: open.expiry_date.clone(),
