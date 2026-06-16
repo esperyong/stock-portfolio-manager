@@ -551,9 +551,16 @@ export interface ImportData {
   account_id: string;
 }
 
+export interface ImportSkipped {
+  row: number;
+  symbol: string;
+  reason: string;
+}
+
 export interface ImportResult {
   imported_count: number;
   skipped_count: number;
+  skipped_rows: ImportSkipped[];
   errors: ImportError[];
 }
 
