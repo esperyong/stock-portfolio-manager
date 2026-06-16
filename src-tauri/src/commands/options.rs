@@ -518,6 +518,8 @@ fn get_option_contracts_inner(
                 contracts: open.quantity,
                 open_price: open.price,
                 open_amount: open.amount,
+                commission: open.commission,
+                traded_at: open.traded_at.clone(),
                 close_price: close_rec.map(|r| r.price),
                 close_code: close_rec.map(|r| r.code.clone()),
                 status,

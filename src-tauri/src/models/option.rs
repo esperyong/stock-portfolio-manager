@@ -32,6 +32,8 @@ pub struct OptionContract {
     pub contracts: i64,         // number of contracts
     pub open_price: f64,        // sell to open price
     pub open_amount: f64,       // total premium received
+    pub commission: f64,        // commission paid on open
+    pub traded_at: Option<String>, // trade date of the open record
     pub close_price: Option<f64>,
     pub close_code: Option<String>, // "C;Ep" (expired) or "A;C" (assigned)
     pub status: String,         // "active" or "expired"

@@ -99,6 +99,37 @@ export default function OptionsPage() {
     return Array.from(set).sort();
   }, [activeContracts]);
 
+  // Compute premium statistics for active contracts
+  const activePremiumStats = useMemo(() => {
+    const now = new Date();
+    const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const d60 = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const d90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+    let total = 0;
+    let last30 = 0;
+    let last60 = 0;
+    let last90 = 0;
+
+    for (const c of activeContracts) {
+      const amount = Math.abs(c.open_amount);
+      total += amount;
+      if (c.traded_at) {
+        const tradedDate = new Date(c.traded_at);
+        if (tradedDate >= d90) last90 += amount;
+        if (tradedDate >= d60) last60 += amount;
+        if (tradedDate >= d30) last30 += amount;
+      }
+    }
+
+    return { total, last30, last60, last90 };
+  }, [activeContracts]);
+
+  // Compute total premium for expired contracts
+  const expiredTotalPremium = useMemo(() => {
+    return expiredContracts.reduce((sum, c) => sum + Math.abs(c.open_amount), 0);
+  }, [expiredContracts]);
+
   // Handle CSV import
   const handleImport = useCallback(
     async (file: File) => {
@@ -235,6 +266,15 @@ export default function OptionsPage() {
         <Text type="success">${Math.abs(v).toLocaleString()}</Text>
       ),
     },
+    {
+      title: "佣金",
+      dataIndex: "commission",
+      key: "commission",
+      width: 80,
+      render: (v: number) => (
+        <Text type="secondary">${Math.abs(v).toLocaleString()}</Text>
+      ),
+    },
   ];
 
   // Table columns for expired contracts
@@ -256,6 +296,53 @@ export default function OptionsPage() {
   // Render active tab content with simulation
   const renderActiveTab = () => (
     <div>
+      <Row gutter={16} style={{ marginBottom: 24 }}>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="累计权利金"
+              value={activePremiumStats.total}
+              prefix="$"
+              precision={0}
+              valueStyle={{ color: "#3f8600" }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="最近90天权利金"
+              value={activePremiumStats.last90}
+              prefix="$"
+              precision={0}
+              valueStyle={{ color: "#3f8600" }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="最近60天权利金"
+              value={activePremiumStats.last60}
+              prefix="$"
+              precision={0}
+              valueStyle={{ color: "#3f8600" }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="最近30天权利金"
+              value={activePremiumStats.last30}
+              prefix="$"
+              precision={0}
+              valueStyle={{ color: "#3f8600" }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
       <Table
         dataSource={activeContracts}
         columns={activeColumns}
@@ -457,12 +544,23 @@ export default function OptionsPage() {
     <div>
       {expiredStats && (
         <Row gutter={16} style={{ marginBottom: 24 }}>
-          <Col span={6}>
+          <Col span={5}>
+            <Card>
+              <Statistic
+                title="累计权利金"
+                value={expiredTotalPremium}
+                prefix="$"
+                precision={0}
+                valueStyle={{ color: "#3f8600" }}
+              />
+            </Card>
+          </Col>
+          <Col span={5}>
             <Card>
               <Statistic title="总合约数" value={expiredStats.total_contracts} />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={5}>
             <Card>
               <Statistic
                 title="被执行合约"
@@ -471,7 +569,7 @@ export default function OptionsPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={5}>
             <Card>
               <Statistic
                 title="到期作废合约"
@@ -480,7 +578,7 @@ export default function OptionsPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col span={4}>
             <Card>
               <Statistic
                 title="执行比例"
@@ -568,7 +666,7 @@ export default function OptionsPage() {
           items={[
             {
               key: "active",
-              label: `在进行中 (${activeContracts.length})`,
+              label: `进行中 (${activeContracts.length})`,
               children: renderActiveTab(),
             },
             {

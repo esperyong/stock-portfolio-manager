@@ -670,6 +670,8 @@ export interface OptionContract {
   contracts: number;
   open_price: number;
   open_amount: number;
+  commission: number;
+  traded_at: string | null;
   close_price: number | null;
   close_code: string | null;
   status: "active" | "expired";
