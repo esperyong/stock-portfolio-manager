@@ -449,20 +449,12 @@ fn normalize_action(raw: &str) -> String {
     }
 }
 
-/// Parse quantity string to number of contracts.
-/// If the absolute value is >= 100 and divisible by 100, treat as shares and divide by 100.
-/// Otherwise treat as contracts directly.
+/// Parse quantity string to number of contracts directly (no conversion).
 fn parse_quantity(s: &str) -> i64 {
-    let val = s
-        .replace(',', "")
+    s.replace(',', "")
         .parse::<f64>()
-        .map(|v| v.abs() as i64)
-        .unwrap_or(0);
-    if val >= 100 && val % 100 == 0 {
-        val / 100
-    } else {
-        val
-    }
+        .map(|v| v as i64)
+        .unwrap_or(0)
 }
 
 /// Helper to get field by trying multiple header names
