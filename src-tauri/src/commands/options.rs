@@ -5,21 +5,32 @@ use crate::models::option::{
 };
 use tauri::State;
 
-/// Parse the option symbol like "PDD 20FEB26 100 P" into components.
+/// Parse the option symbol like "PDD 20FEB26 100 P" or "BRK B 16JUN23 330 C" into components.
 /// Returns (underlying, expiry_date, strike_price, option_type)
+/// Supports multi-word tickers (e.g. "BRK B") by parsing from the end.
 fn parse_option_symbol(symbol: &str) -> Result<(String, String, f64, String), String> {
     let parts: Vec<&str> = symbol.trim().split_whitespace().collect();
     if parts.len() < 4 {
         return Err(format!("Invalid option symbol: {}", symbol));
     }
-    let underlying = parts[0].to_string();
-    let expiry_date = parts[1].to_string();
-    let strike_price: f64 = parts[2]
+
+    // Parse from the end: last part is option_type, second-to-last is strike, third-to-last is expiry
+    // Everything before that is the underlying ticker (handles multi-word tickers like "BRK B")
+    let len = parts.len();
+    let option_type = parts[len - 1].to_string();
+    if option_type != "P" && option_type != "C" {
+        return Err(format!(
+            "Invalid option type '{}' in: {}",
+            option_type, symbol
+        ));
+    }
+    let strike_price: f64 = parts[len - 2]
         .parse()
         .map_err(|_| format!("Invalid strike price in: {}", symbol))?;
-    let option_type = parts[3].to_string();
-    if option_type != "P" && option_type != "C" {
-        return Err(format!("Invalid option type '{}' in: {}", option_type, symbol));
+    let expiry_date = parts[len - 3].to_string();
+    let underlying = parts[..len - 3].join(" ");
+    if underlying.is_empty() {
+        return Err(format!("Invalid option symbol: {}", symbol));
     }
     Ok((underlying, expiry_date, strike_price, option_type))
 }
@@ -62,7 +73,10 @@ pub fn import_options_csv(
 
         // Skip "Total" summary rows
         let first_field = record.get(0).unwrap_or("").trim();
-        if first_field.starts_with("Total") || first_field.is_empty() {
+        if first_field.starts_with("Total")
+            || first_field.starts_with("总数")
+            || first_field.is_empty()
+        {
             skipped += 1;
             continue;
         }
@@ -71,7 +85,15 @@ pub fn import_options_csv(
         let option_symbol = match get_field(
             &record,
             &headers,
-            &["股票", "股票代码", "合约", "期权", "期权代码", "symbol", "Symbol"],
+            &[
+                "股票",
+                "股票代码",
+                "合约",
+                "期权",
+                "期权代码",
+                "symbol",
+                "Symbol",
+            ],
         ) {
             Some(s) if !s.is_empty() => s,
             _ => {
@@ -91,8 +113,12 @@ pub fn import_options_csv(
             };
 
         // Parse other fields
-        let action_raw = get_field(&record, &headers, &["操作", "买/卖", "买卖", "action", "Action"])
-            .unwrap_or_default();
+        let action_raw = get_field(
+            &record,
+            &headers,
+            &["操作", "买/卖", "买卖", "action", "Action"],
+        )
+        .unwrap_or_default();
         let action = normalize_action(&action_raw);
         if action.is_empty() {
             errors.push(format!("Row {}: invalid action '{}'", i + 2, action_raw));
@@ -103,7 +129,14 @@ pub fn import_options_csv(
         let quantity_str = get_field(
             &record,
             &headers,
-            &["股票数量", "数量", "合约数量", "合约数", "quantity", "Quantity"],
+            &[
+                "股票数量",
+                "数量",
+                "合约数量",
+                "合约数",
+                "quantity",
+                "Quantity",
+            ],
         )
         .unwrap_or_default();
         let quantity: i64 = parse_quantity(&quantity_str);
@@ -137,10 +170,12 @@ pub fn import_options_csv(
             .parse()
             .unwrap_or(0.0);
 
-        let traded_at =
-            get_field(&record, &headers, &["交易时间", "traded_at", "Trade Date"]);
-        let settled_at =
-            get_field(&record, &headers, &["交割时间", "settled_at", "Settle Date"]);
+        let traded_at = get_field(&record, &headers, &["交易时间", "traded_at", "Trade Date"]);
+        let settled_at = get_field(
+            &record,
+            &headers,
+            &["交割时间", "settled_at", "Settle Date"],
+        );
 
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
@@ -204,7 +239,8 @@ pub fn get_expired_option_stats(
 ) -> Result<ExpiredOptionStats, String> {
     let contracts = get_option_contracts_inner(&db, &account_id)?;
 
-    let expired: Vec<&OptionContract> = contracts.iter().filter(|c| c.status == "expired").collect();
+    let expired: Vec<&OptionContract> =
+        contracts.iter().filter(|c| c.status == "expired").collect();
     let total = expired.len() as i64;
     let assigned = expired
         .iter()
@@ -368,10 +404,7 @@ pub fn simulate_sell_call(
 
 /// Delete all option records for an account
 #[tauri::command(rename_all = "camelCase")]
-pub fn delete_option_records(
-    db: State<Database>,
-    account_id: String,
-) -> Result<(), String> {
+pub fn delete_option_records(db: State<Database>, account_id: String) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "DELETE FROM option_records WHERE account_id = ?1",
