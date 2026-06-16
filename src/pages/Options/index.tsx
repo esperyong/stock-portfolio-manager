@@ -229,6 +229,7 @@ export default function OptionsPage() {
           message.warning(
             `导入完成：成功 ${result.imported} 条，跳过 ${result.skipped} 条，错误 ${result.errors.length} 条`
           );
+          console.error("[期权导入错误]", result.errors);
         } else {
           message.success(
             `导入成功：${result.imported} 条记录，跳过 ${result.skipped} 条`
