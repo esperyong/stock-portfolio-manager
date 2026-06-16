@@ -551,13 +551,17 @@ fn get_option_contracts_inner(
             .collect();
         closes.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
 
-        // Pair each open with a close chronologically (one-to-one match)
-        let mut close_iter = closes.into_iter();
-        for open in &opens {
-            // Find the next close record that comes after this open
-            let close_rec = close_iter.next();
+        // Determine completion by comparing total quantities:
+        // Total sold (open) quantity vs total bought (close) quantity
+        let total_open_qty: i64 = opens.iter().map(|r| r.quantity.abs()).sum();
+        let total_close_qty: i64 = closes.iter().map(|r| r.quantity.abs()).sum();
+        let is_fully_closed = total_open_qty > 0 && total_close_qty >= total_open_qty;
 
-            let status = if close_rec.is_some() {
+        // Get close info from the last close record for display purposes
+        let last_close = closes.last();
+
+        for open in &opens {
+            let status = if is_fully_closed {
                 "expired".to_string()
             } else {
                 "active".to_string()
@@ -575,8 +579,16 @@ fn get_option_contracts_inner(
                 open_amount: open.amount,
                 commission: open.commission,
                 traded_at: open.traded_at.clone(),
-                close_price: close_rec.map(|r| r.price),
-                close_code: close_rec.map(|r| r.code.clone()),
+                close_price: if is_fully_closed {
+                    last_close.map(|r| r.price)
+                } else {
+                    None
+                },
+                close_code: if is_fully_closed {
+                    last_close.map(|r| r.code.clone())
+                } else {
+                    None
+                },
                 status,
                 account_id: open.account_id.clone(),
             });
