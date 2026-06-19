@@ -241,6 +241,28 @@ export default function OptionsPage() {
     return expiredContracts.reduce((sum, c) => sum + Math.abs(c.open_amount), 0);
   }, [expiredContracts]);
 
+  // Compute premium grouped by underlying stock for active contracts
+  const activePremiumByStock = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of activeContracts) {
+      map[c.underlying] = (map[c.underlying] || 0) + Math.abs(c.open_amount);
+    }
+    return Object.entries(map)
+      .map(([underlying, premium]) => ({ underlying, premium }))
+      .sort((a, b) => b.premium - a.premium);
+  }, [activeContracts]);
+
+  // Compute premium grouped by underlying stock for expired contracts
+  const expiredPremiumByStock = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of expiredContracts) {
+      map[c.underlying] = (map[c.underlying] || 0) + Math.abs(c.open_amount);
+    }
+    return Object.entries(map)
+      .map(([underlying, premium]) => ({ underlying, premium }))
+      .sort((a, b) => b.premium - a.premium);
+  }, [expiredContracts]);
+
   // Handle CSV import
   const handleImport = useCallback(
     async (file: File) => {
@@ -496,12 +518,31 @@ export default function OptionsPage() {
         }}
       />
 
+      {activePremiumByStock.length > 0 && (
+        <Card title="按股票权利金统计" size="small" style={{ marginBottom: 24 }}>
+          <Row gutter={[12, 12]}>
+            {activePremiumByStock.map((item) => (
+              <Col key={item.underlying} flex="20%">
+                <Card size="small" styles={{ body: { padding: "10px 16px" } }}>
+                  <Space>
+                    <Text strong>{item.underlying}</Text>
+                    <Text strong style={{ color: "#3f8600" }}>
+                      ${item.premium.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </Text>
+                  </Space>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        </Card>
+      )}
+
       {activeUnderlyings.length > 0 && (
         <>
           <Card title="模拟计算 - 输入股票价格" size="small" style={{ marginBottom: 16 }}>
-            <Row gutter={[16, 8]}>
+            <Row gutter={[12, 8]}>
               {activeUnderlyings.map((symbol) => (
-                <Col key={symbol} span={6}>
+                <Col key={symbol} flex="20%">
                   <Space>
                     <Text strong>{symbol}</Text>
                     <InputNumber
@@ -511,7 +552,7 @@ export default function OptionsPage() {
                       step={1}
                       value={stockPrices[symbol] ?? null}
                       onChange={(v) => handlePriceChange(symbol, v)}
-                      style={{ width: 120 }}
+                      style={{ width: 100 }}
                     />
                   </Space>
                 </Col>
@@ -754,6 +795,25 @@ export default function OptionsPage() {
             ),
         }}
       />
+
+      {expiredPremiumByStock.length > 0 && (
+        <Card title="按股票权利金统计" size="small" style={{ marginTop: 24 }}>
+          <Row gutter={[12, 12]}>
+            {expiredPremiumByStock.map((item) => (
+              <Col key={item.underlying} flex="20%">
+                <Card size="small" styles={{ body: { padding: "10px 16px" } }}>
+                  <Space>
+                    <Text strong>{item.underlying}</Text>
+                    <Text strong style={{ color: "#3f8600" }}>
+                      ${item.premium.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </Text>
+                  </Space>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        </Card>
+      )}
     </div>
   );
 
