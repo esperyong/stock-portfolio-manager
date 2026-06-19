@@ -574,7 +574,7 @@ fn get_option_contracts_inner(
         // Collect all close records (BUY + C;Ep or A;C) sorted by traded_at
         let mut closes: Vec<&OptionRecord> = recs
             .iter()
-            .filter(|r| r.action == "BUY" && (r.code == "C;Ep" || r.code == "A;C"))
+            .filter(|r| r.action == "BUY" && (r.code == "C;Ep" || r.code == "A;C" || r.code == "C;P"))
             .collect();
         closes.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
 
