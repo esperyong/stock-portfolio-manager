@@ -727,6 +727,15 @@ export interface ImportOptionsResult {
   errors: string[];
 }
 
+export interface StockSplit {
+  id: number;
+  stock_code: string;
+  split_date: string;
+  ratio_from: number;
+  ratio_to: number;
+  created_at: string;
+}
+
 export interface StockPriceInput {
   symbol: string;
   price: number;

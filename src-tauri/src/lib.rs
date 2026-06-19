@@ -238,6 +238,10 @@ pub fn run() {
             commands::options::simulate_sell_put,
             commands::options::simulate_sell_call,
             commands::options::delete_option_records,
+            // Stock Splits (for option contract matching)
+            commands::stock_splits::get_stock_splits,
+            commands::stock_splits::add_stock_split,
+            commands::stock_splits::delete_stock_split,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

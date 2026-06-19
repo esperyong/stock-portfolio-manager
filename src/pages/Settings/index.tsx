@@ -2,6 +2,7 @@ import { Tabs, Typography, Space, Tag } from "antd";
 import { SettingOutlined } from "@ant-design/icons";
 import AIPage from "../AI";
 import GeneralSettings from "./GeneralSettings";
+import StockSplitSettings from "./StockSplitSettings";
 
 const { Title } = Typography;
 
@@ -21,6 +22,11 @@ export default function SettingsPage() {
         </Space>
       ),
       children: <AIPage />,
+    },
+    {
+      key: "stockSplits",
+      label: "📊 拆股管理",
+      children: <StockSplitSettings />,
     },
   ];
 

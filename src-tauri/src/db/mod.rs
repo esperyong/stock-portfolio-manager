@@ -323,6 +323,18 @@ impl Database {
             );
         ")?;
 
+        // Stock splits configuration for option contract matching
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS stock_splits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stock_code TEXT NOT NULL,
+                split_date TEXT NOT NULL,
+                ratio_from INTEGER NOT NULL DEFAULT 1,
+                ratio_to INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );",
+        )?;
+
         migrate_transactions_check_constraint(&conn)?;
 
         // Convert synthetic BUY records to OPEN type so they are correctly

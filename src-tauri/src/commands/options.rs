@@ -3,6 +3,7 @@ use crate::models::option::{
     CallContractSimulation, ExpiredOptionStats, OptionContract, OptionRecord,
     PutContractSimulation, SellCallSimulation, SellPutSimulation,
 };
+use crate::models::stock_split::StockSplit;
 use tauri::State;
 
 /// Parse the option symbol like "PDD 20FEB26 100 P" or "BRK B 16JUN23 330 C" into components.
@@ -552,6 +553,33 @@ fn get_option_contracts_inner(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
+    // Load stock splits for cross-symbol contract matching
+    let splits: Vec<StockSplit> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, stock_code, split_date, ratio_from, ratio_to, created_at
+                 FROM stock_splits",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(StockSplit {
+                    id: row.get(0)?,
+                    stock_code: row.get(1)?,
+                    split_date: row.get(2)?,
+                    ratio_from: row.get(3)?,
+                    ratio_to: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| e.to_string())?);
+        }
+        result
+    };
+
     let mut contracts: Vec<OptionContract> = Vec::new();
     let mut grouped: std::collections::HashMap<String, Vec<OptionRecord>> =
         std::collections::HashMap::new();
@@ -562,6 +590,9 @@ fn get_option_contracts_inner(
             .or_default()
             .push(record);
     }
+
+    // Track orphan close records from groups with no opens (for cross-symbol split matching)
+    let mut orphan_closes: Vec<&OptionRecord> = Vec::new();
 
     for (symbol, recs) in &grouped {
         // Collect all open records (SELL + O or O;P) sorted by traded_at
@@ -577,6 +608,13 @@ fn get_option_contracts_inner(
             .filter(|r| r.action == "BUY" && (r.code == "C;Ep" || r.code == "A;C" || r.code == "C;P"))
             .collect();
         closes.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
+
+        // If this group has closes but no opens, save them as orphans for split matching
+        if opens.is_empty() && !closes.is_empty() {
+            for c in &closes {
+                orphan_closes.push(c);
+            }
+        }
 
         // Determine completion by comparing total quantities:
         // Total sold (open) quantity vs total bought (close) quantity
@@ -619,6 +657,167 @@ fn get_option_contracts_inner(
                 status,
                 account_id: open.account_id.clone(),
             });
+        }
+    }
+
+    // Post-processing: cross-symbol matching for stock split affected contracts.
+    // When a stock splits, the option symbol changes (strike price adjusts).
+    // Opens under the old symbol and closes under the new symbol need to be matched.
+    if !orphan_closes.is_empty() && !splits.is_empty() {
+        // Helper: parse expiry date like "27JUN25" or "16SEP22" to a sortable date for comparison
+        // Returns (year, month, day) tuple for comparing with split date
+        fn parse_expiry_to_ymd(expiry: &str) -> Option<(i32, u32, u32)> {
+            let months: std::collections::HashMap<&str, u32> = [
+                ("JAN", 1),
+                ("FEB", 2),
+                ("MAR", 3),
+                ("APR", 4),
+                ("MAY", 5),
+                ("JUN", 6),
+                ("JUL", 7),
+                ("AUG", 8),
+                ("SEP", 9),
+                ("OCT", 10),
+                ("NOV", 11),
+                ("DEC", 12),
+            ]
+            .iter()
+            .cloned()
+            .collect();
+
+            if expiry.len() >= 7 {
+                let day_str = &expiry[0..2];
+                let mon_str = &expiry[2..5].to_uppercase();
+                let yr_str = &expiry[5..7];
+                let day: u32 = day_str.parse().ok()?;
+                let month: u32 = *months.get(mon_str.as_str())?;
+                let year: i32 = 2000 + yr_str.parse::<i32>().ok()?;
+                Some((year, month, day))
+            } else {
+                None
+            }
+        }
+
+        // Helper: parse a split date string like "2025-06-10" to (year, month, day)
+        fn parse_split_date(date_str: &str) -> Option<(i32, u32, u32)> {
+            let parts: Vec<&str> = date_str.split('-').collect();
+            if parts.len() == 3 {
+                let year: i32 = parts[0].parse().ok()?;
+                let month: u32 = parts[1].parse().ok()?;
+                let day: u32 = parts[2].parse().ok()?;
+                Some((year, month, day))
+            } else {
+                None
+            }
+        }
+
+        // Helper: check if split_date is between traded_at and expiry
+        fn split_date_in_range(
+            split_ymd: (i32, u32, u32),
+            expiry_ymd: (i32, u32, u32),
+        ) -> bool {
+            // For our purposes: split date is before expiry (contract still alive at split time)
+            let (sy, sm, sd) = split_ymd;
+            let (ey, em, ed) = expiry_ymd;
+            (sy, sm, sd) <= (ey, em, ed)
+        }
+
+        // Build a set of orphan close indices keyed by (underlying, expiry_date, option_type)
+        // for efficient lookup
+        let mut orphan_by_key: std::collections::HashMap<
+            (String, String, String),
+            Vec<usize>,
+        > = std::collections::HashMap::new();
+        for (idx, oc) in orphan_closes.iter().enumerate() {
+            let key = (
+                oc.underlying.clone(),
+                oc.expiry_date.clone(),
+                oc.option_type.clone(),
+            );
+            orphan_by_key.entry(key).or_default().push(idx);
+        }
+
+        for contract in contracts.iter_mut() {
+            if contract.status != "active" {
+                continue;
+            }
+
+            // Check if any stock split applies to this contract's underlying
+            for split in &splits {
+                if split.stock_code != contract.underlying {
+                    continue;
+                }
+
+                // Parse the split date and expiry date
+                let split_ymd = match parse_split_date(&split.split_date) {
+                    Some(d) => d,
+                    None => continue,
+                };
+                let expiry_ymd = match parse_expiry_to_ymd(&contract.expiry_date) {
+                    Some(d) => d,
+                    None => continue,
+                };
+
+                // Split must have occurred before or on expiry (contract was alive during split)
+                if !split_date_in_range(split_ymd, expiry_ymd) {
+                    continue;
+                }
+
+                // Calculate expected adjusted strike
+                // original_strike / split_ratio (e.g., 200 / 3 = 66.67)
+                let ratio = split.ratio_to as f64 / split.ratio_from as f64;
+                let expected_adjusted_strike = contract.strike_price / ratio;
+
+                // Look for orphan closes with same underlying, expiry, option_type
+                let key = (
+                    contract.underlying.clone(),
+                    contract.expiry_date.clone(),
+                    contract.option_type.clone(),
+                );
+                if let Some(indices) = orphan_by_key.get(&key) {
+                    let contract_qty = contract.contracts.abs();
+
+                    let mut matched_qty: i64 = 0;
+                    let mut last_close_price: Option<f64> = None;
+                    let mut last_close_code: Option<String> = None;
+                    let mut last_close_traded_at: Option<String> = None;
+
+                    for &idx in indices {
+                        let oc = orphan_closes[idx];
+                        let oc_qty = oc.quantity.abs();
+
+                        // Check if the strike price of this close record matches
+                        // the expected adjusted strike within a 2% tolerance
+                        let strike_diff = if expected_adjusted_strike > 0.0 {
+                            (oc.strike_price - expected_adjusted_strike).abs()
+                                / expected_adjusted_strike
+                        } else {
+                            1.0 // can't match if expected strike is 0
+                        };
+
+                        if strike_diff <= 0.02 {
+                            matched_qty += oc_qty;
+
+                            // Track the latest close for display
+                            let oc_traded = oc.traded_at.clone().unwrap_or_default();
+                            if last_close_traded_at.is_none()
+                                || oc_traded > last_close_traded_at.clone().unwrap_or_default()
+                            {
+                                last_close_traded_at = Some(oc_traded);
+                                last_close_price = Some(oc.price);
+                                last_close_code = Some(oc.code.clone());
+                            }
+                        }
+                    }
+
+                    if matched_qty >= contract_qty {
+                        contract.status = "expired".to_string();
+                        contract.close_price = last_close_price;
+                        contract.close_code = last_close_code;
+                        break; // contract is now resolved, stop checking more splits
+                    }
+                }
+            }
         }
     }
 

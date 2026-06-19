@@ -12,6 +12,7 @@ pub mod quote;
 pub mod quote_provider;
 pub mod review;
 pub mod statistics;
+pub mod stock_split;
 pub mod transaction;
 
 pub use account::Account;

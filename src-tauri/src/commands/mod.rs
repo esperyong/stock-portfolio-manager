@@ -15,4 +15,5 @@ pub mod quotes;
 pub mod review;
 pub mod snapshots;
 pub mod statistics;
+pub mod stock_splits;
 pub mod transactions;
