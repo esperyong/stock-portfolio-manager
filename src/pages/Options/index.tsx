@@ -95,6 +95,15 @@ export default function OptionsPage() {
     setStockPrices({});
   }, [selectedAccountId, fetchContracts, fetchExpiredStats, clearSimulations]);
 
+  // Calculate latest trade time from all contracts
+  const latestTradeTime = useMemo(() => {
+    const times = contracts
+      .map((c) => c.traded_at)
+      .filter((t): t is string => !!t);
+    if (times.length === 0) return null;
+    return times.sort().reverse()[0];
+  }, [contracts]);
+
   // Get active and expired contracts
   const activeContracts = useMemo(
     () => contracts.filter((c) => c.status === "active"),
@@ -903,6 +912,13 @@ export default function OptionsPage() {
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
+          tabBarExtraContent={
+            latestTradeTime ? (
+              <Text type="secondary" style={{ paddingRight: 8 }}>
+                最新交易时间：{latestTradeTime.substring(0, 10)}
+              </Text>
+            ) : null
+          }
           items={[
             {
               key: "active",
