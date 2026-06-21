@@ -127,7 +127,7 @@ export interface HoldingDetail {
   market_value: number;
   cost_value: number;
   pnl: number;
-  pnl_percent: number;
+  pnl_percent: number | null;
   daily_pnl: number;
   currency: Currency;
   /** Market value normalised to USD for cross-currency sorting. */
@@ -145,7 +145,7 @@ export interface PnlItem {
   symbol: string;
   name: string;
   pnl: number;
-  pnl_percent: number;
+  pnl_percent: number | null;
   market_value: number;
 }
 
@@ -399,7 +399,7 @@ export interface QuarterlyHoldingSnapshot {
   market_value: number;
   cost_value: number;
   pnl: number;
-  pnl_percent: number;
+  pnl_percent: number | null;
   weight: number;
   notes: string | null;
 }
@@ -485,7 +485,7 @@ export interface HoldingNoteHistory {
   shares: number;
   avg_cost: number;
   close_price: number;
-  pnl_percent: number;
+  pnl_percent: number | null;
   notes: string;
 }
 
@@ -600,7 +600,7 @@ export interface QuarterlyHoldingStatus {
   shares: number;
   avg_cost: number;
   close_price: number;
-  pnl_percent: number;
+  pnl_percent: number | null;
   notes: string | null;
   decision_quality: "correct" | "wrong" | "pending" | null;
 }

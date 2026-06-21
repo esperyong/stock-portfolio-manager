@@ -126,10 +126,10 @@ pub async fn get_statistics_overview(
     let mut pnl_items: Vec<PnlItem> = symbol_map
         .into_iter()
         .map(|(symbol, agg)| {
-            let pnl_percent = if agg.cost_base != 0.0 {
-                agg.pnl_base / agg.cost_base * 100.0
+            let pnl_percent = if agg.cost_base > 0.0 {
+                Some(agg.pnl_base / agg.cost_base * 100.0)
             } else {
-                0.0
+                None
             };
             PnlItem {
                 symbol,

@@ -113,10 +113,10 @@ async fn build_holding_details(
             let market_value = r.shares * current_price;
             let cost_value = r.shares * r.avg_cost;
             let pnl = market_value - cost_value;
-            let pnl_percent = if cost_value != 0.0 {
-                pnl / cost_value * 100.0
+            let pnl_percent = if cost_value > 0.0 {
+                Some(pnl / cost_value * 100.0)
             } else {
-                0.0
+                None
             };
             let daily_pnl = r.shares * change;
             HoldingDetail {

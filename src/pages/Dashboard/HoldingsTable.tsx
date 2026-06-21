@@ -126,7 +126,7 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       dataIndex: "avg_cost",
       key: "avg_cost",
       sorter: (a, b) => a.avg_cost - b.avg_cost,
-      render: (price: number, record: HoldingDetail) =>
+      render: (price: number, _record: HoldingDetail) =>
         `${price.toLocaleString("en-US", {
           minimumFractionDigits: 3,
           maximumFractionDigits: 3,
@@ -184,13 +184,15 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       title: "盈亏比例",
       dataIndex: "pnl_percent",
       key: "pnl_percent",
-      sorter: (a, b) => a.pnl_percent - b.pnl_percent,
-      render: (pnl: number) => (
-        <span style={{ color: pnlColor(pnl) }}>
-          {pnl >= 0 ? "+" : ""}
-          {pnl.toFixed(2)}%
-        </span>
-      ),
+      render: (pnl: number | null) =>
+        pnl != null ? (
+          <span style={{ color: pnlColor(pnl) }}>
+            {pnl >= 0 ? "+" : ""}
+            {pnl.toFixed(2)}%
+          </span>
+        ) : (
+          <span>-</span>
+        ),
       align: "right",
       width: 100,
     },

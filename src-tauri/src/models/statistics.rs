@@ -12,7 +12,7 @@ pub struct PnlItem {
     pub symbol: String,
     pub name: String,
     pub pnl: f64,
-    pub pnl_percent: f64,
+    pub pnl_percent: Option<f64>,
     pub market_value: f64,
 }
 

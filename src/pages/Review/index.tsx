@@ -69,7 +69,7 @@ function HoldingTimeline({
     <Timeline
       items={timeline.map((item) => ({
         dot:
-          item.pnl_percent >= 0 ? (
+          item.pnl_percent != null && item.pnl_percent >= 0 ? (
             <CheckCircleOutlined style={{ color: pnlColorAnt(1) }} />
           ) : (
             <CloseCircleOutlined style={{ color: pnlColorAnt(-1) }} />
@@ -82,9 +82,10 @@ function HoldingTimeline({
                 <Text>持仓：{item.shares} 股</Text>
                 <Text>均价：{item.avg_cost.toFixed(2)}</Text>
                 <Text>现价：{item.close_price.toFixed(2)}</Text>
-                <Tag color={pnlTag(item.pnl_percent)}>
-                  {item.pnl_percent >= 0 ? "+" : ""}
-                  {item.pnl_percent.toFixed(2)}%
+                <Tag color={item.pnl_percent != null ? pnlTag(item.pnl_percent) : "default"}>
+                  {item.pnl_percent != null
+                    ? `${item.pnl_percent >= 0 ? "+" : ""}${item.pnl_percent.toFixed(2)}%`
+                    : "-"}
                 </Tag>
               </Space>
               {item.notes && (

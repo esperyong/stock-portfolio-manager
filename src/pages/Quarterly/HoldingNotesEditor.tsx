@@ -127,9 +127,10 @@ export default function HoldingNotesEditor({
         <Descriptions.Item label="均成本">{holding.avg_cost.toFixed(4)}</Descriptions.Item>
         <Descriptions.Item label="收盘价">{holding.close_price.toFixed(4)}</Descriptions.Item>
         <Descriptions.Item label="盈亏%">
-          <Text style={{ color: pnlColorDark(holding.pnl_percent) }}>
-            {holding.pnl_percent >= 0 ? "+" : ""}
-            {holding.pnl_percent.toFixed(2)}%
+          <Text style={{ color: holding.pnl_percent != null ? pnlColorDark(holding.pnl_percent) : undefined }}>
+            {holding.pnl_percent != null
+              ? `${holding.pnl_percent >= 0 ? "+" : ""}${holding.pnl_percent.toFixed(2)}%`
+              : "-"}
           </Text>
         </Descriptions.Item>
         <Descriptions.Item label="类别">{holding.category_name}</Descriptions.Item>
@@ -175,9 +176,10 @@ export default function HoldingNotesEditor({
                     <div className="text-xs text-gray-500 mb-1">
                       {h.snapshot_date} | 持股: {h.shares} | 成本: {h.avg_cost.toFixed(4)} |
                       收盘: {h.close_price.toFixed(4)} |{" "}
-                      <span style={{ color: pnlColorDark(h.pnl_percent) }}>
-                        {h.pnl_percent >= 0 ? "+" : ""}
-                        {h.pnl_percent.toFixed(2)}%
+                      <span style={{ color: h.pnl_percent != null ? pnlColorDark(h.pnl_percent) : undefined }}>
+                        {h.pnl_percent != null
+                          ? `${h.pnl_percent >= 0 ? "+" : ""}${h.pnl_percent.toFixed(2)}%`
+                          : "-"}
                       </span>
                     </div>
                     {h.notes ? (

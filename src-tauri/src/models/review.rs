@@ -7,7 +7,7 @@ pub struct QuarterlyHoldingStatus {
     pub shares: f64,
     pub avg_cost: f64,
     pub close_price: f64,
-    pub pnl_percent: f64,
+    pub pnl_percent: Option<f64>,
     pub notes: Option<String>,
     pub decision_quality: Option<String>, // "correct" | "wrong" | "pending"
 }

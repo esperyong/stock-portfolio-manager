@@ -31,7 +31,7 @@ pub struct HoldingDetail {
     pub market_value: f64,
     pub cost_value: f64,
     pub pnl: f64,
-    pub pnl_percent: f64,
+    pub pnl_percent: Option<f64>,
     pub daily_pnl: f64,
     pub currency: String,
     /// Market value normalised to USD for cross-currency comparison/sorting.

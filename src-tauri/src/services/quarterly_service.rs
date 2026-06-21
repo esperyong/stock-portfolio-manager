@@ -266,10 +266,10 @@ pub async fn create_quarterly_snapshot(
         // Insert holding snapshots
         for (row, close_price, market_value, cost_value) in &holding_rows_for_insert {
             let pnl = market_value - cost_value;
-            let pnl_percent = if *cost_value != 0.0 {
-                pnl / cost_value * 100.0
+            let pnl_percent = if *cost_value > 0.0 {
+                Some(pnl / cost_value * 100.0)
             } else {
-                0.0
+                None
             };
             let weight = if total_value != 0.0 {
                 let mv_usd = match row.market.as_str() {
@@ -294,7 +294,7 @@ pub async fn create_quarterly_snapshot(
                     row.symbol, row.name, row.market,
                     row.category_name, row.category_color,
                     row.shares, row.avg_cost, close_price, market_value,
-                    cost_value, pnl, pnl_percent, weight
+                    cost_value, pnl, pnl_percent.unwrap_or(0.0), weight
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -821,7 +821,7 @@ pub async fn refresh_quarterly_snapshot(
         market_value: f64,
         cost_value: f64,
         pnl: f64,
-        pnl_percent: f64,
+        pnl_percent: Option<f64>,
     }
 
     let mut computed: Vec<ComputedRow> = Vec::new();
@@ -831,10 +831,10 @@ pub async fn refresh_quarterly_snapshot(
         let market_value = h.shares * close_price;
         let cost_value = h.shares * h.avg_cost;
         let pnl = market_value - cost_value;
-        let pnl_percent = if cost_value != 0.0 {
-            pnl / cost_value * 100.0
+        let pnl_percent = if cost_value > 0.0 {
+            Some(pnl / cost_value * 100.0)
         } else {
-            0.0
+            None
         };
 
         match h.market.as_str() {
@@ -925,7 +925,7 @@ pub async fn refresh_quarterly_snapshot(
                         c.market_value,
                         c.cost_value,
                         c.pnl,
-                        c.pnl_percent,
+                        c.pnl_percent.unwrap_or(0.0),
                         weight,
                         c.holding.notes
                     ],
@@ -958,7 +958,7 @@ pub async fn refresh_quarterly_snapshot(
                         c.market_value,
                         c.cost_value,
                         c.pnl,
-                        c.pnl_percent,
+                        c.pnl_percent.unwrap_or(0.0),
                         weight,
                         snapshot_id,
                         c.holding.account_id,

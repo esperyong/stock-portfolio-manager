@@ -14,7 +14,8 @@ interface Props {
   snap?: QuarterlySnapshot;
 }
 
-function fmtPct(v: number) {
+function fmtPct(v: number | null) {
+  if (v == null) return "-";
   return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
 
@@ -223,11 +224,9 @@ export default function SnapshotHoldingsTable({ holdings, snapshotId, loading, s
       title: "盈亏%",
       dataIndex: "pnl_percent",
       key: "pnl_percent",
-      render: (v: number) => (
-        <Text style={{ color: pnlColorDark(v) }}>{fmtPct(v)}</Text>
+      render: (v: number | null) => (
+        <Text style={{ color: v != null ? pnlColorDark(v) : undefined }}>{fmtPct(v)}</Text>
       ),
-      sorter: (a: QuarterlyHoldingSnapshot, b: QuarterlyHoldingSnapshot) =>
-        a.pnl_percent - b.pnl_percent,
     },
     {
       title: "操作思考",

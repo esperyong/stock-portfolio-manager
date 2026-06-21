@@ -39,7 +39,7 @@ pub struct QuarterlyHoldingSnapshot {
     pub market_value: f64,
     pub cost_value: f64,
     pub pnl: f64,
-    pub pnl_percent: f64,
+    pub pnl_percent: Option<f64>,
     pub weight: f64,
     pub notes: Option<String>,
 }
@@ -133,7 +133,7 @@ pub struct HoldingNoteHistory {
     pub shares: f64,
     pub avg_cost: f64,
     pub close_price: f64,
-    pub pnl_percent: f64,
+    pub pnl_percent: Option<f64>,
     pub notes: String,
 }
 

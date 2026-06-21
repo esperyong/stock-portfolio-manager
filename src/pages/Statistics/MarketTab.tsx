@@ -36,7 +36,7 @@ interface AggregatedStock {
   market_value: number;
   market_value_usd: number;
   pnl: number;
-  pnl_percent: number;
+  pnl_percent: number | null;
   _totalMv: number;
 }
 
@@ -103,7 +103,7 @@ export default function MarketTab({ selectedMarket, onMarketChange }: Props) {
       market_value: v.market_value,
       market_value_usd: v.market_value_usd,
       pnl: v.pnl,
-      pnl_percent: v.cost_value > 0 ? (v.pnl / v.cost_value) * 100 : 0,
+      pnl_percent: v.cost_value > 0 ? (v.pnl / v.cost_value) * 100 : null,
       _totalMv: totalMv,
     }));
   }, [stats]);
@@ -204,13 +204,15 @@ export default function MarketTab({ selectedMarket, onMarketChange }: Props) {
       title: "盈亏比例",
       dataIndex: "pnl_percent",
       key: "pnl_percent",
-      sorter: (a, b) => a.pnl_percent - b.pnl_percent,
-      render: (pnl: number) => (
-        <span style={{ color: pnlColor(pnl) }}>
-          {pnl >= 0 ? "+" : ""}
-          {pnl.toFixed(2)}%
-        </span>
-      ),
+      render: (pnl: number | null) =>
+        pnl != null ? (
+          <span style={{ color: pnlColor(pnl) }}>
+            {pnl >= 0 ? "+" : ""}
+            {pnl.toFixed(2)}%
+          </span>
+        ) : (
+          <span>-</span>
+        ),
       align: "right" as const,
       width: 100,
     },
