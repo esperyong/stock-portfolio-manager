@@ -111,8 +111,10 @@ function PnlText({ value, percent }: { value: number | null; percent: number | n
   return (
     <span style={{ color }}>
       {sign}{value.toFixed(2)}
-      {percent !== null && (
+      {percent !== null ? (
         <> ({sign}{percent.toFixed(2)}%)</>
+      ) : (
+        <> (-)</>
       )}
     </span>
   );

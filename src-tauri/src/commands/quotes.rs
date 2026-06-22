@@ -161,7 +161,7 @@ pub async fn get_holding_quotes(
                 // Cleared position: report realized PnL from transaction history.
                 let (realized_pnl, total_buy_cost) =
                     realized_pnl_map.get(&h.id).copied().unwrap_or((0.0, 0.0));
-                let pnl_pct = if total_buy_cost != 0.0 {
+                let pnl_pct = if total_buy_cost > 0.0 {
                     Some(realized_pnl / total_buy_cost * 100.0)
                 } else {
                     None
@@ -172,7 +172,7 @@ pub async fn get_holding_quotes(
                 let total_cost = Some(h.avg_cost * h.shares);
                 let unrealized_pnl = market_value.zip(total_cost).map(|(mv, tc)| mv - tc);
                 let unrealized_pnl_percent = unrealized_pnl.zip(total_cost).and_then(|(pnl, tc)| {
-                    if tc != 0.0 {
+                    if tc > 0.0 {
                         Some(pnl / tc * 100.0)
                     } else {
                         None
