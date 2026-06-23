@@ -451,7 +451,7 @@ export default function OptionsPage() {
       width: 100,
       render: (v: string | null) => {
         if (v === "A;C") return <Tag color="red">被执行</Tag>;
-        if (v === "C;Ep") return <Tag color="green">已作废</Tag>;
+        if (v === "C;Ep") return <Tag color="green">已到期</Tag>;
         if (v === "C;P") return <Tag color="blue">已平仓</Tag>;
         return <Tag>未知</Tag>;
       },
