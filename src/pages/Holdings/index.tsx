@@ -528,6 +528,7 @@ export default function HoldingsPage() {
       dataIndex: "symbol",
       key: "symbol",
       width: 140,
+      ellipsis: true,
       sorter: (a: HoldingWithQuote, b: HoldingWithQuote) => a.symbol.localeCompare(b.symbol),
       render: (symbol: string, record: HoldingWithQuote) => (
         <Space>
@@ -593,12 +594,13 @@ export default function HoldingsPage() {
     {
       title: "实时价格",
       key: "current_price",
-      width: 110,
+      width: 100,
+      ellipsis: true,
       render: (_: unknown, record: HoldingWithQuote) => {
         if (!record.quote) return quotesLoading ? <Spin size="small" /> : <span>—</span>;
         return (
           <span>
-            {currencySymbol[record.currency]}{record.quote.current_price.toFixed(2)}
+            {record.quote.current_price.toFixed(2)}
           </span>
         );
       },
