@@ -182,8 +182,8 @@ pub fn import_options_csv(
         let now = chrono::Utc::now().to_rfc3339();
 
         conn.execute(
-            "INSERT INTO option_records (id, account_id, option_symbol, underlying, expiry_date, strike_price, option_type, action, code, quantity, price, amount, commission, fee, traded_at, settled_at, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+            "INSERT INTO option_records (id, account_id, option_symbol, underlying, expiry_date, strike_price, option_type, action, code, quantity, price, amount, commission, fee, traded_at, settled_at, created_at, contract_status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, 'active')",
             rusqlite::params![
                 id,
                 account_id,
@@ -216,11 +216,267 @@ pub fn import_options_csv(
         }
     }
 
+    // Recompute contract statuses after import
+    drop(conn); // release lock before recompute
+    if imported > 0 {
+        let _ = recompute_option_statuses(&db, &account_id);
+    }
+
     Ok(ImportOptionsResult {
         imported,
         skipped,
         errors,
     })
+}
+
+/// Recompute contract_status for all open records of an account.
+/// Pairs open (SELL+O) and close (BUY+C;Ep/A;C/C;P) records by option_symbol,
+/// and handles cross-symbol split-affected contract matching.
+fn recompute_option_statuses(db: &Database, account_id: &str) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    // Load full records for this account
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, option_symbol, underlying, expiry_date, strike_price,
+                    option_type, action, code, quantity, price, traded_at
+             FROM option_records WHERE account_id = ?1
+             ORDER BY option_symbol, traded_at",
+        )
+        .map_err(|e| e.to_string())?;
+
+    struct Rec {
+        id: String,
+        option_symbol: String,
+        underlying: String,
+        expiry_date: String,
+        strike_price: f64,
+        option_type: String,
+        action: String,
+        code: String,
+        quantity: i64,
+        traded_at: Option<String>,
+    }
+
+    let records: Vec<Rec> = stmt
+        .query_map(rusqlite::params![account_id], |row| {
+            Ok(Rec {
+                id: row.get(0)?,
+                option_symbol: row.get(1)?,
+                underlying: row.get(2)?,
+                expiry_date: row.get(3)?,
+                strike_price: row.get(4)?,
+                option_type: row.get(5)?,
+                action: row.get(6)?,
+                code: row.get(7)?,
+                quantity: row.get(8)?,
+                traded_at: row.get(10)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    // Reset all contract_status to 'active' first
+    let _ = conn.execute(
+        "UPDATE option_records SET contract_status = 'active' WHERE account_id = ?1",
+        rusqlite::params![account_id],
+    );
+
+    // Group by option_symbol
+    let mut groups: std::collections::HashMap<String, Vec<&Rec>> =
+        std::collections::HashMap::new();
+    for r in &records {
+        groups.entry(r.option_symbol.clone()).or_default().push(r);
+    }
+
+    // Track orphan closes (groups with closes but no opens — potential split-affected)
+    let mut orphan_closes: Vec<&Rec> = Vec::new();
+
+    // Phase 1: same-symbol matching
+    for (_symbol, group_recs) in &groups {
+        let mut opens: Vec<&Rec> = group_recs
+            .iter()
+            .filter(|r| r.action == "SELL" && r.code.starts_with("O"))
+            .copied()
+            .collect();
+        opens.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
+
+        let mut closes: Vec<&Rec> = group_recs
+            .iter()
+            .filter(|r| {
+                r.action == "BUY"
+                    && (r.code == "C;Ep" || r.code == "A;C" || r.code == "C;P")
+            })
+            .copied()
+            .collect();
+        closes.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
+
+        if opens.is_empty() {
+            if !closes.is_empty() {
+                for c in &closes {
+                    orphan_closes.push(c);
+                }
+            }
+            continue;
+        }
+
+        let total_open_qty: i64 = opens.iter().map(|r| r.quantity.abs()).sum();
+        let total_close_qty: i64 = closes.iter().map(|r| r.quantity.abs()).sum();
+
+        if total_open_qty > 0 && total_close_qty >= total_open_qty {
+            let status = match closes.last().map(|c| c.code.as_str()) {
+                Some("A;C") => "assigned",
+                Some("C;P") => "closed",
+                _ => "expired",
+            };
+
+            for open in &opens {
+                let _ = conn.execute(
+                    "UPDATE option_records SET contract_status = ?1 WHERE id = ?2",
+                    rusqlite::params![status, open.id],
+                );
+            }
+        }
+    }
+
+    // Phase 2: cross-symbol split matching
+    if !orphan_closes.is_empty() {
+        // Load stock splits
+        let splits: Vec<StockSplit> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, stock_code, split_date, ratio_from, ratio_to, created_at
+                     FROM stock_splits",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(StockSplit {
+                        id: row.get(0)?,
+                        stock_code: row.get(1)?,
+                        split_date: row.get(2)?,
+                        ratio_from: row.get(3)?,
+                        ratio_to: row.get(4)?,
+                        created_at: row.get(5)?,
+                    })
+                })
+                .map_err(|e| e.to_string())?;
+            let mut result = Vec::new();
+            for row in rows {
+                result.push(row.map_err(|e| e.to_string())?);
+            }
+            result
+        };
+
+        if !splits.is_empty() {
+            // Active open records that haven't been matched yet
+            // (those still with contract_status = 'active' after Phase 1)
+            let active_open_ids: Vec<String> = {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id FROM option_records
+                         WHERE account_id = ?1 AND action = 'SELL' AND code LIKE 'O%'
+                           AND contract_status = 'active'",
+                    )
+                    .map_err(|e| e.to_string())?;
+                let ids = stmt
+                    .query_map(rusqlite::params![account_id], |row| {
+                        row.get::<_, String>(0)
+                    })
+                    .map_err(|e| e.to_string())?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| e.to_string())?;
+                ids
+            };
+            let active_opens: Vec<&Rec> = records
+                .iter()
+                .filter(|r| r.action == "SELL" && r.code.starts_with("O")
+                    && active_open_ids.contains(&r.id))
+                .collect();
+
+            // Parse helpers
+            fn parse_expiry_ymd(e: &str) -> Option<(i32, u32, u32)> {
+                let months: std::collections::HashMap<&str, u32> = [
+                    ("JAN",1),("FEB",2),("MAR",3),("APR",4),("MAY",5),("JUN",6),
+                    ("JUL",7),("AUG",8),("SEP",9),("OCT",10),("NOV",11),("DEC",12),
+                ].iter().cloned().collect();
+                if e.len() >= 7 {
+                    let day: u32 = e[0..2].parse().ok()?;
+                    let mon: u32 = *months.get(&e[2..5].to_uppercase().as_str())?;
+                    let yr: i32 = 2000 + e[5..7].parse::<i32>().ok()?;
+                    Some((yr, mon, day))
+                } else { None }
+            }
+
+            fn parse_split_ymd(s: &str) -> Option<(i32, u32, u32)> {
+                let parts: Vec<&str> = s.split('-').collect();
+                if parts.len() == 3 {
+                    Some((parts[0].parse().ok()?, parts[1].parse().ok()?, parts[2].parse().ok()?))
+                } else { None }
+            }
+
+            for ao in &active_opens {
+                // Check if already matched (contract_status changed from 'active')
+                // We need to re-read status; for now check all active opens
+                'split_loop: for split in &splits {
+                    if split.stock_code != ao.underlying { continue; }
+                    let split_ymd = match parse_split_ymd(&split.split_date) {
+                        Some(d) => d, None => continue,
+                    };
+                    let exp_ymd = match parse_expiry_ymd(&ao.expiry_date) {
+                        Some(d) => d, None => continue,
+                    };
+                    if (split_ymd.0, split_ymd.1, split_ymd.2)
+                        > (exp_ymd.0, exp_ymd.1, exp_ymd.2)
+                    {
+                        continue;
+                    }
+
+                    let ratio = split.ratio_to as f64 / split.ratio_from as f64;
+                    let expected_strike = ao.strike_price / ratio;
+
+                    // Find matching orphan closes
+                    let mut matched_qty: i64 = 0;
+                    let mut last_code: Option<&str> = None;
+                    let contract_qty = ao.quantity.abs();
+
+                    for oc in &orphan_closes {
+                        if oc.underlying != ao.underlying
+                            || oc.expiry_date != ao.expiry_date
+                            || oc.option_type != ao.option_type
+                        {
+                            continue;
+                        }
+                        let strike_diff = if expected_strike > 0.0 {
+                            (oc.strike_price - expected_strike).abs() / expected_strike
+                        } else {
+                            1.0
+                        };
+                        if strike_diff <= 0.02 {
+                            matched_qty += oc.quantity.abs();
+                            last_code = Some(oc.code.as_str());
+                        }
+                    }
+
+                    if matched_qty >= contract_qty {
+                        let status = match last_code {
+                            Some("A;C") => "assigned",
+                            Some("C;P") => "closed",
+                            _ => "expired",
+                        };
+                        let _ = conn.execute(
+                            "UPDATE option_records SET contract_status = ?1 WHERE id = ?2",
+                            rusqlite::params![status, ao.id],
+                        );
+                        break 'split_loop;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Get all option contracts for an account, paired by option_symbol
@@ -241,7 +497,7 @@ pub fn get_expired_option_stats(
     let contracts = get_option_contracts_inner(&db, &account_id)?;
 
     let expired: Vec<&OptionContract> =
-        contracts.iter().filter(|c| c.status == "expired").collect();
+        contracts.iter().filter(|c| c.status != "active").collect();
     let total = expired.len() as i64;
     let assigned = expired
         .iter()
@@ -754,16 +1010,51 @@ fn get_field(
     None
 }
 
-/// Internal helper that doesn't require State wrapper
+/// Internal helper that doesn't require State wrapper.
+/// Uses pre-computed contract_status from the DB for fast loading; avoids
+/// the expensive open-vs-close quantity matching on every call.
 fn get_option_contracts_inner(
     db: &Database,
     account_id: &str,
 ) -> Result<Vec<OptionContract>, String> {
-    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    // Lazy one-time recompute: if the account has records but none have a
+    // non-'active' contract_status, the data hasn't been migrated yet.
+    let needs_recompute: bool = {
+        let conn = db.conn.lock().map_err(|e| e.to_string())?;
+        let total: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM option_records WHERE account_id = ?1",
+                rusqlite::params![account_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if total == 0 {
+            false
+        } else {
+            let non_active: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM option_records WHERE account_id = ?1 AND contract_status != 'active'",
+                    rusqlite::params![account_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            non_active == 0
+        }
+    };
+    if needs_recompute {
+        let _ = recompute_option_statuses(db, account_id);
+        // After recompute, re-enter with properly computed data
+        return get_option_contracts_inner(db, account_id);
+    }
 
+    // Fetch all records — open records have pre-computed contract_status;
+    // close records are only needed to display close_price/close_code.
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, account_id, option_symbol, underlying, expiry_date, strike_price, option_type, action, code, quantity, price, amount, commission, fee, traded_at, settled_at, created_at
+            "SELECT id, account_id, option_symbol, underlying, expiry_date, strike_price,
+                    option_type, action, code, quantity, price, amount, commission, fee,
+                    traded_at, settled_at, created_at, contract_status
              FROM option_records WHERE account_id = ?1
              ORDER BY option_symbol, traded_at",
         )
@@ -789,43 +1080,16 @@ fn get_option_contracts_inner(
                 traded_at: row.get(14)?,
                 settled_at: row.get(15)?,
                 created_at: row.get(16)?,
+                contract_status: row.get(17)?,
             })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
-    // Load stock splits for cross-symbol contract matching
-    let splits: Vec<StockSplit> = {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, stock_code, split_date, ratio_from, ratio_to, created_at
-                 FROM stock_splits",
-            )
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(StockSplit {
-                    id: row.get(0)?,
-                    stock_code: row.get(1)?,
-                    split_date: row.get(2)?,
-                    ratio_from: row.get(3)?,
-                    ratio_to: row.get(4)?,
-                    created_at: row.get(5)?,
-                })
-            })
-            .map_err(|e| e.to_string())?;
-        let mut result = Vec::new();
-        for row in rows {
-            result.push(row.map_err(|e| e.to_string())?);
-        }
-        result
-    };
-
-    let mut contracts: Vec<OptionContract> = Vec::new();
+    // Group by option_symbol
     let mut grouped: std::collections::HashMap<String, Vec<OptionRecord>> =
         std::collections::HashMap::new();
-
     for record in records {
         grouped
             .entry(record.option_symbol.clone())
@@ -833,50 +1097,41 @@ fn get_option_contracts_inner(
             .push(record);
     }
 
-    // Track orphan close records from groups with no opens (for cross-symbol split matching)
-    let mut orphan_closes: Vec<&OptionRecord> = Vec::new();
+    let mut contracts: Vec<OptionContract> = Vec::new();
 
-    for (symbol, recs) in &grouped {
-        // Collect all open records (SELL + O or O;P) sorted by traded_at
+    for (_symbol, recs) in &grouped {
+        // Open records (SELL + code starts with "O")
         let mut opens: Vec<&OptionRecord> = recs
             .iter()
             .filter(|r| r.action == "SELL" && r.code.starts_with("O"))
             .collect();
         opens.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
 
-        // Collect all close records (BUY + C;Ep or A;C) sorted by traded_at
+        if opens.is_empty() {
+            continue;
+        }
+
+        // Close records
         let mut closes: Vec<&OptionRecord> = recs
             .iter()
-            .filter(|r| r.action == "BUY" && (r.code == "C;Ep" || r.code == "A;C" || r.code == "C;P"))
+            .filter(|r| {
+                r.action == "BUY"
+                    && (r.code == "C;Ep" || r.code == "A;C" || r.code == "C;P")
+            })
             .collect();
         closes.sort_by(|a, b| a.traded_at.cmp(&b.traded_at));
 
-        // If this group has closes but no opens, save them as orphans for split matching
-        if opens.is_empty() && !closes.is_empty() {
-            for c in &closes {
-                orphan_closes.push(c);
-            }
-        }
-
-        // Determine completion by comparing total quantities:
-        // Total sold (open) quantity vs total bought (close) quantity
-        let total_open_qty: i64 = opens.iter().map(|r| r.quantity.abs()).sum();
-        let total_close_qty: i64 = closes.iter().map(|r| r.quantity.abs()).sum();
-        let is_fully_closed = total_open_qty > 0 && total_close_qty >= total_open_qty;
-
-        // Get close info from the last close record for display purposes
         let last_close = closes.last();
 
-        for open in &opens {
-            let status = if is_fully_closed {
-                "expired".to_string()
-            } else {
-                "active".to_string()
-            };
+        // Use the pre-computed contract_status from the first open record.
+        // All open records in the same group share the same status.
+        let status = opens[0].contract_status.clone();
 
+        for open in &opens {
+            let is_expired = status != "active";
             contracts.push(OptionContract {
                 id: open.id.clone(),
-                option_symbol: symbol.clone(),
+                option_symbol: open.option_symbol.clone(),
                 underlying: open.underlying.clone(),
                 expiry_date: open.expiry_date.clone(),
                 strike_price: open.strike_price,
@@ -886,189 +1141,34 @@ fn get_option_contracts_inner(
                 open_amount: open.amount,
                 commission: open.commission,
                 traded_at: open.traded_at.clone(),
-                close_price: if is_fully_closed {
+                close_price: if is_expired {
                     last_close.map(|r| r.price)
                 } else {
                     None
                 },
-                close_code: if is_fully_closed {
+                close_code: if is_expired {
                     last_close.map(|r| r.code.clone())
                 } else {
                     None
                 },
-                status,
+                status: status.clone(),
                 account_id: open.account_id.clone(),
             });
         }
     }
 
-    // Post-processing: cross-symbol matching for stock split affected contracts.
-    // When a stock splits, the option symbol changes (strike price adjusts).
-    // Opens under the old symbol and closes under the new symbol need to be matched.
-    if !orphan_closes.is_empty() && !splits.is_empty() {
-        // Helper: parse expiry date like "27JUN25" or "16SEP22" to a sortable date for comparison
-        // Returns (year, month, day) tuple for comparing with split date
-        fn parse_expiry_to_ymd(expiry: &str) -> Option<(i32, u32, u32)> {
-            let months: std::collections::HashMap<&str, u32> = [
-                ("JAN", 1),
-                ("FEB", 2),
-                ("MAR", 3),
-                ("APR", 4),
-                ("MAY", 5),
-                ("JUN", 6),
-                ("JUL", 7),
-                ("AUG", 8),
-                ("SEP", 9),
-                ("OCT", 10),
-                ("NOV", 11),
-                ("DEC", 12),
-            ]
-            .iter()
-            .cloned()
-            .collect();
-
-            if expiry.len() >= 7 {
-                let day_str = &expiry[0..2];
-                let mon_str = &expiry[2..5].to_uppercase();
-                let yr_str = &expiry[5..7];
-                let day: u32 = day_str.parse().ok()?;
-                let month: u32 = *months.get(mon_str.as_str())?;
-                let year: i32 = 2000 + yr_str.parse::<i32>().ok()?;
-                Some((year, month, day))
-            } else {
-                None
-            }
-        }
-
-        // Helper: parse a split date string like "2025-06-10" to (year, month, day)
-        fn parse_split_date(date_str: &str) -> Option<(i32, u32, u32)> {
-            let parts: Vec<&str> = date_str.split('-').collect();
-            if parts.len() == 3 {
-                let year: i32 = parts[0].parse().ok()?;
-                let month: u32 = parts[1].parse().ok()?;
-                let day: u32 = parts[2].parse().ok()?;
-                Some((year, month, day))
-            } else {
-                None
-            }
-        }
-
-        // Helper: check if split_date is between traded_at and expiry
-        fn split_date_in_range(
-            split_ymd: (i32, u32, u32),
-            expiry_ymd: (i32, u32, u32),
-        ) -> bool {
-            // For our purposes: split date is before expiry (contract still alive at split time)
-            let (sy, sm, sd) = split_ymd;
-            let (ey, em, ed) = expiry_ymd;
-            (sy, sm, sd) <= (ey, em, ed)
-        }
-
-        // Build a set of orphan close indices keyed by (underlying, expiry_date, option_type)
-        // for efficient lookup
-        let mut orphan_by_key: std::collections::HashMap<
-            (String, String, String),
-            Vec<usize>,
-        > = std::collections::HashMap::new();
-        for (idx, oc) in orphan_closes.iter().enumerate() {
-            let key = (
-                oc.underlying.clone(),
-                oc.expiry_date.clone(),
-                oc.option_type.clone(),
-            );
-            orphan_by_key.entry(key).or_default().push(idx);
-        }
-
-        for contract in contracts.iter_mut() {
-            if contract.status != "active" {
-                continue;
-            }
-
-            // Check if any stock split applies to this contract's underlying
-            for split in &splits {
-                if split.stock_code != contract.underlying {
-                    continue;
-                }
-
-                // Parse the split date and expiry date
-                let split_ymd = match parse_split_date(&split.split_date) {
-                    Some(d) => d,
-                    None => continue,
-                };
-                let expiry_ymd = match parse_expiry_to_ymd(&contract.expiry_date) {
-                    Some(d) => d,
-                    None => continue,
-                };
-
-                // Split must have occurred before or on expiry (contract was alive during split)
-                if !split_date_in_range(split_ymd, expiry_ymd) {
-                    continue;
-                }
-
-                // Calculate expected adjusted strike
-                // original_strike / split_ratio (e.g., 200 / 3 = 66.67)
-                let ratio = split.ratio_to as f64 / split.ratio_from as f64;
-                let expected_adjusted_strike = contract.strike_price / ratio;
-
-                // Look for orphan closes with same underlying, expiry, option_type
-                let key = (
-                    contract.underlying.clone(),
-                    contract.expiry_date.clone(),
-                    contract.option_type.clone(),
-                );
-                if let Some(indices) = orphan_by_key.get(&key) {
-                    let contract_qty = contract.contracts.abs();
-
-                    let mut matched_qty: i64 = 0;
-                    let mut last_close_price: Option<f64> = None;
-                    let mut last_close_code: Option<String> = None;
-                    let mut last_close_traded_at: Option<String> = None;
-
-                    for &idx in indices {
-                        let oc = orphan_closes[idx];
-                        let oc_qty = oc.quantity.abs();
-
-                        // Check if the strike price of this close record matches
-                        // the expected adjusted strike within a 2% tolerance
-                        let strike_diff = if expected_adjusted_strike > 0.0 {
-                            (oc.strike_price - expected_adjusted_strike).abs()
-                                / expected_adjusted_strike
-                        } else {
-                            1.0 // can't match if expected strike is 0
-                        };
-
-                        if strike_diff <= 0.02 {
-                            matched_qty += oc_qty;
-
-                            // Track the latest close for display
-                            let oc_traded = oc.traded_at.clone().unwrap_or_default();
-                            if last_close_traded_at.is_none()
-                                || oc_traded > last_close_traded_at.clone().unwrap_or_default()
-                            {
-                                last_close_traded_at = Some(oc_traded);
-                                last_close_price = Some(oc.price);
-                                last_close_code = Some(oc.code.clone());
-                            }
-                        }
-                    }
-
-                    if matched_qty >= contract_qty {
-                        contract.status = "expired".to_string();
-                        contract.close_price = last_close_price;
-                        contract.close_code = last_close_code;
-                        break; // contract is now resolved, stop checking more splits
-                    }
-                }
-            }
-        }
-    }
-
     contracts.sort_by(|a, b| {
-        a.underlying.cmp(&b.underlying).then_with(|| {
-            parse_expiry_to_sortable(&a.expiry_date).cmp(&parse_expiry_to_sortable(&b.expiry_date))
-        }).then_with(|| {
-            a.strike_price.partial_cmp(&b.strike_price).unwrap_or(std::cmp::Ordering::Equal)
-        })
+        a.underlying
+            .cmp(&b.underlying)
+            .then_with(|| {
+                parse_expiry_to_sortable(&a.expiry_date)
+                    .cmp(&parse_expiry_to_sortable(&b.expiry_date))
+            })
+            .then_with(|| {
+                a.strike_price
+                    .partial_cmp(&b.strike_price)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     });
 
     Ok(contracts)

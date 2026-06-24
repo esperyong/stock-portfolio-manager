@@ -110,7 +110,7 @@ export default function OptionsPage() {
     [contracts]
   );
   const expiredContracts = useMemo(
-    () => contracts.filter((c) => c.status === "expired"),
+    () => contracts.filter((c) => c.status !== "active"),
     [contracts]
   );
 
@@ -446,13 +446,13 @@ export default function OptionsPage() {
     ...activeColumns,
     {
       title: "结果",
-      dataIndex: "close_code",
-      key: "close_code",
-      width: 100,
-      render: (v: string | null) => {
-        if (v === "A;C") return <Tag color="red">被执行</Tag>;
-        if (v === "C;Ep") return <Tag color="green">已到期</Tag>;
-        if (v === "C;P") return <Tag color="blue">已平仓</Tag>;
+      dataIndex: "status",
+      key: "result",
+      width: 80,
+      render: (v: string) => {
+        if (v === "assigned") return <Tag color="red">被执行</Tag>;
+        if (v === "expired") return <Tag color="green">已到期</Tag>;
+        if (v === "closed") return <Tag color="blue">已平仓</Tag>;
         return <Tag>未知</Tag>;
       },
     },

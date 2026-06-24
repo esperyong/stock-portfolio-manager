@@ -335,6 +335,11 @@ impl Database {
             );",
         )?;
 
+        // Migration: add contract_status column to mark each open record's status
+        let _ = conn.execute_batch(
+            "ALTER TABLE option_records ADD COLUMN contract_status TEXT NOT NULL DEFAULT 'active';",
+        );
+
         // Option share lot configuration: shares per contract per underlying
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS option_share_lots (

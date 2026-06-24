@@ -682,7 +682,7 @@ export interface OptionContract {
   traded_at: string | null;
   close_price: number | null;
   close_code: string | null;
-  status: "active" | "expired";
+  status: "active" | "expired" | "assigned" | "closed";
   account_id: string;
 }
 

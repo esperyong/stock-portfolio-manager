@@ -19,6 +19,7 @@ pub struct OptionRecord {
     pub traded_at: Option<String>,
     pub settled_at: Option<String>,
     pub created_at: String,
+    pub contract_status: String,  // "active", "expired", "assigned", "closed"
 }
 
 /// A paired option contract with status derived from matching records
@@ -36,8 +37,8 @@ pub struct OptionContract {
     pub commission: f64,        // commission paid on open
     pub traded_at: Option<String>, // trade date of the open record
     pub close_price: Option<f64>,
-    pub close_code: Option<String>, // "C;Ep" (expired) or "A;C" (assigned)
-    pub status: String,         // "active" or "expired"
+    pub close_code: Option<String>, // "C;Ep" (expired), "A;C" (assigned), "C;P" (closed)
+    pub status: String,         // "active", "expired", "assigned", "closed"
     pub account_id: String,
 }
 
