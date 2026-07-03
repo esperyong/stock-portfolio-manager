@@ -16,7 +16,7 @@
 - 后端新增 `services/fund_data.rs` 与 `commands/portfolios.rs`，命令在 `lib.rs` `invoke_handler!` 注册；错误信息中文。
 - 前端新增 `portfolioStore` 与 `Funds` 页面（路由 `/funds`），TS 类型与 Rust struct 手工镜像（snake_case）。
 
-明确不做（后续阶段）：调仓 diff 与信号计算、跨基金抱团趋势聚合、组合净值化收益曲线（雪球式模拟收益）、MANUAL 组合的创建/编辑 UI、markdown 报告导出、基金净值/估值展示、个股反查十大流通股东。
+明确不做（后续阶段，各自另立 change）：调仓 diff 与信号计算、跨基金抱团趋势聚合、**主动偏离度**（基金权重 − 指数权重，以 ETF 全量成分为基准，已验证同一 jjcc 通路可取指数权重）、**ETF 每日 PCF 申购赎回清单接入**（日频全量成分+精确股数，数据源待 spike 验证）、组合净值化收益曲线（雪球式模拟收益）、MANUAL 组合的创建/编辑 UI、markdown 报告导出、基金净值/估值展示、个股反查十大流通股东。
 
 ## Capabilities
 
