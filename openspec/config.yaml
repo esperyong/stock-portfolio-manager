@@ -1,0 +1,17 @@
+schema: spec-driven
+
+context: |
+  跨平台桌面应用（Tauri 2.0）：Rust 后端 (src-tauri/) + React 18/TypeScript 前端 (src/)，本地 SQLite 数据库。
+  个人股票投资组合管理工具，支持美股/A股/港股三个市场，UI 为中文。
+  架构约定见 CLAUDE.md（IPC command 双处注册、Rust/TS 类型手工同步、migration 只追加等）。
+  所有 spec 文档（proposal/design/tasks）用中文撰写；代码标识符和技术术语保留英文。
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
