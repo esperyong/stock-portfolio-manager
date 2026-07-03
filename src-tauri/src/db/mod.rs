@@ -350,6 +350,38 @@ impl Database {
             );",
         )?;
 
+        // Fund tracking: portfolios (组合 = 权重配比的版本序列, 无成本概念) and
+        // versioned positions. Zero foreign-key coupling with the real-asset
+        // domain (accounts/holdings/transactions).
+        conn.execute_batch("
+            CREATE TABLE IF NOT EXISTS portfolios (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                source_type TEXT NOT NULL CHECK(source_type IN ('FUND', 'MANUAL')),
+                fund_code TEXT UNIQUE,
+                fund_type TEXT,
+                last_refreshed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+        ")?;
+
+        conn.execute_batch("
+            CREATE TABLE IF NOT EXISTS portfolio_positions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                portfolio_id TEXT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+                as_of_date TEXT NOT NULL,
+                stock_code TEXT NOT NULL,
+                stock_name TEXT NOT NULL,
+                weight_pct REAL,
+                shares_wan REAL,
+                market_value_wan REAL,
+                position_rank INTEGER,
+                created_at TEXT NOT NULL,
+                UNIQUE(portfolio_id, as_of_date, stock_code)
+            );
+        ")?;
+
         migrate_transactions_check_constraint(&conn)?;
 
         // Convert synthetic BUY records to OPEN type so they are correctly

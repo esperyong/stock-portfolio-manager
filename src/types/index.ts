@@ -748,3 +748,36 @@ export interface StockPriceInput {
   price: number;
 }
 
+// ===== Fund tracking (组合 + 仓位模型, mirrors src-tauri/src/models/portfolio.rs) =====
+
+export interface Portfolio {
+  id: string;
+  name: string;
+  source_type: "FUND" | "MANUAL";
+  fund_code: string | null;
+  fund_type: string | null;
+  latest_as_of_date: string | null;
+  last_refreshed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortfolioPosition {
+  id: number;
+  portfolio_id: string;
+  as_of_date: string;
+  stock_code: string;
+  stock_name: string;
+  weight_pct: number | null;
+  shares_wan: number | null;
+  market_value_wan: number | null;
+  position_rank: number | null;
+  created_at: string;
+}
+
+export interface FundSearchResult {
+  fund_code: string;
+  fund_name: string;
+  fund_type: string;
+}
+

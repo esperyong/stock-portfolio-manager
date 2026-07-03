@@ -1,6 +1,7 @@
 pub mod ai_config_service;
 pub mod alert_service;
 pub mod exchange_rate_service;
+pub mod fund_data;
 pub mod http_client;
 pub mod import_export_service;
 pub mod performance_service;
