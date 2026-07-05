@@ -9,6 +9,7 @@ pub mod import_export;
 pub mod ocr;
 pub mod options;
 pub mod performance;
+pub mod portfolios;
 pub mod quarterly;
 pub mod quote_provider;
 pub mod quotes;
