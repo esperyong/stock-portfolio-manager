@@ -5,6 +5,7 @@ pub mod fund_data;
 pub mod http_client;
 pub mod import_export_service;
 pub mod performance_service;
+pub mod position_diff;
 pub mod quarterly_service;
 pub mod quote_provider_service;
 pub mod quote_service;

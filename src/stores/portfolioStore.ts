@@ -1,11 +1,21 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import type { FundSearchResult, Portfolio, PortfolioPosition } from "../types";
+import type {
+  FundSearchResult,
+  Portfolio,
+  PortfolioPosition,
+  PortfolioVersion,
+  PositionDiff,
+} from "../types";
 
 interface PortfolioState {
   portfolios: Portfolio[];
   /** portfolio_id -> 最新一期仓位（后端已按权重降序） */
   positions: Record<string, PortfolioPosition[]>;
+  /** portfolio_id -> 版本列表（按报告期降序） */
+  versions: Record<string, PortfolioVersion[]>;
+  /** portfolio_id -> 最近一次请求的调仓对比结果 */
+  diffs: Record<string, PositionDiff>;
   searchResults: FundSearchResult[];
   loading: boolean;
   searching: boolean;
@@ -20,11 +30,15 @@ interface PortfolioState {
   deletePortfolio: (id: string) => Promise<void>;
   refreshPortfolio: (id: string) => Promise<void>;
   fetchPositions: (id: string) => Promise<void>;
+  fetchVersions: (id: string) => Promise<PortfolioVersion[]>;
+  fetchDiff: (id: string, fromDate?: string, toDate?: string) => Promise<PositionDiff>;
 }
 
 export const usePortfolioStore = create<PortfolioState>((set, get) => ({
   portfolios: [],
   positions: {},
+  versions: {},
+  diffs: {},
   searchResults: [],
   loading: false,
   searching: false,
@@ -98,5 +112,23 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
       portfolioId: id,
     });
     set((state) => ({ positions: { ...state.positions, [id]: latest } }));
+  },
+
+  fetchVersions: async (id) => {
+    const versions = await invoke<PortfolioVersion[]>("get_portfolio_versions", {
+      portfolioId: id,
+    });
+    set((state) => ({ versions: { ...state.versions, [id]: versions } }));
+    return versions;
+  },
+
+  fetchDiff: async (id, fromDate, toDate) => {
+    const diff = await invoke<PositionDiff>("get_portfolio_diff", {
+      portfolioId: id,
+      fromDate,
+      toDate,
+    });
+    set((state) => ({ diffs: { ...state.diffs, [id]: diff } }));
+    return diff;
   },
 }));

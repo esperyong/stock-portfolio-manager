@@ -95,19 +95,18 @@ pub fn parse_fund_search_response(body: &str) -> Result<Vec<FundSearchResult>, S
     Ok(results)
 }
 
-/// 抓取基金当年全部已披露期次的持仓；当年无任何期次（年初定期报告未出）
-/// 时自动回退抓取上一年。
+/// 抓取基金当年与上一年全部已披露期次的持仓。
+/// 固定双年拉取：单靠当年，年初到 Q2 季报披露前只有一期版本，
+/// 调仓对比无从谈起；上一年数据同时保证了历史回补（v1 设计意图）。
 pub async fn fetch_fund_holdings(fund_code: &str) -> Result<Vec<FundPeriodHoldings>, String> {
     let current_year: i32 = chrono::Utc::now()
         .format("%Y")
         .to_string()
         .parse()
         .map_err(|_| "获取当前年份失败".to_string())?;
-    let periods = fetch_fund_holdings_for_year(fund_code, current_year).await?;
-    if !periods.is_empty() {
-        return Ok(periods);
-    }
-    let periods = fetch_fund_holdings_for_year(fund_code, current_year - 1).await?;
+    let mut periods = fetch_fund_holdings_for_year(fund_code, current_year).await?;
+    let prev = fetch_fund_holdings_for_year(fund_code, current_year - 1).await?;
+    periods.extend(prev);
     if periods.is_empty() {
         return Err("未获取到该基金的股票持仓数据（当年与上一年均无披露）".to_string());
     }

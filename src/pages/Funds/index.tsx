@@ -7,6 +7,7 @@ import {
   Popconfirm,
   Space,
   Table,
+  Tabs,
   Tag,
   Typography,
   message,
@@ -20,6 +21,7 @@ import {
 } from "@ant-design/icons";
 import { usePortfolioStore } from "../../stores/portfolioStore";
 import AddFundModal from "./AddFundModal";
+import PositionDiffView from "./PositionDiffView";
 import type { Portfolio, PortfolioPosition } from "../../types";
 
 const { Title, Text } = Typography;
@@ -170,29 +172,46 @@ function PortfolioCard({ portfolio }: { portfolio: Portfolio }) {
         </Text>
       </Space>
       {expanded && (
-        <div style={{ marginTop: 16 }}>
-          {topRows.length > 0 && (
-            <Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
-              报告期截止：{topRows[0].as_of_date}（前 {topRows.length} 大重仓）
-            </Text>
-          )}
-          <Table<PortfolioPosition>
-            dataSource={topRows}
-            columns={positionColumns}
-            rowKey="id"
-            size="small"
-            loading={loadingPositions}
-            pagination={false}
-            locale={{
-              emptyText: (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="暂无仓位数据，请点击「刷新」获取"
-                />
+        <Tabs
+          style={{ marginTop: 8 }}
+          size="small"
+          items={[
+            {
+              key: "positions",
+              label: "最新持仓",
+              children: (
+                <div>
+                  {topRows.length > 0 && (
+                    <Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
+                      报告期截止：{topRows[0].as_of_date}（前 {topRows.length} 大重仓）
+                    </Text>
+                  )}
+                  <Table<PortfolioPosition>
+                    dataSource={topRows}
+                    columns={positionColumns}
+                    rowKey="id"
+                    size="small"
+                    loading={loadingPositions}
+                    pagination={false}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description="暂无仓位数据，请点击「刷新」获取"
+                        />
+                      ),
+                    }}
+                  />
+                </div>
               ),
-            }}
-          />
-        </div>
+            },
+            {
+              key: "diff",
+              label: "调仓",
+              children: <PositionDiffView portfolioId={portfolio.id} />,
+            },
+          ]}
+        />
       )}
     </Card>
   );
