@@ -62,6 +62,9 @@ diff 响应结构：`{ from_version, to_version, items }`，`items` 内按类别
 ### D5. 纯函数服务层：`services/position_diff.rs`
 `infer_coverage(as_of_date, row_count) -> Coverage` 与 `compute_diff(from_rows, to_rows) -> Vec<DiffItem>` 均为无 IO 纯函数；命令层只负责 SQL 取数与参数校验。单测直接喂内存数据，不依赖 DB 与网络。
 
+### D7. 刷新改为固定双年拉取（当年 + 上一年）
+实现 3.1 验证时发现的阻塞：v1 刷新只拉当年（空则回退上一年），而年初到 Q2 季报披露前当年只有 Q1 一期——**新添加的基金在长达数月的窗口里只有一个版本，调仓对比整体不可用**。改为每次刷新固定拉取当年+上一年（多 1 个 HTTP 请求，手动季度级场景无感），任何基金首刷即有约 5 期版本。这也兑现了 v1 设计的既定意图（"基金历史可随时从接口回补"）。对应主 spec 需求「仓位版本抓取与落库」的 MODIFIED 增量。
+
 ### D6. 前端：卡片展开区改双视图
 `src/pages/Funds/` 卡片展开区改为两个页签：「最新持仓」（v1 原表）/「调仓」（新增 `PositionDiffView` 组件）。调仓视图：两个期次下拉（默认最新两期）→ 分类明细表（变动类型 Tag、股数 from→to 及 ±%、权重变化 pp、最新市值）；涉及 PARTIAL 版本时顶部显示提示条「该期仅披露前十大重仓，『退出披露』不代表清仓」。`portfolioStore` 增 `fetchVersions` / `fetchDiff`；`types/index.ts` 镜像 `PortfolioVersion` / `PositionDiff` / `PositionDiffItem`（snake_case）。
 
