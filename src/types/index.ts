@@ -781,3 +781,32 @@ export interface FundSearchResult {
   fund_type: string;
 }
 
+export interface PortfolioVersion {
+  as_of_date: string;
+  row_count: number;
+  coverage: "FULL" | "PARTIAL";
+}
+
+export interface PositionDiffItem {
+  stock_code: string;
+  stock_name: string;
+  change_type: "NEW" | "EXITED" | "INCREASED" | "DECREASED" | "UNCHANGED";
+  basis: "shares" | "weight";
+  from_shares_wan: number | null;
+  to_shares_wan: number | null;
+  shares_delta_wan: number | null;
+  shares_delta_pct: number | null;
+  from_weight_pct: number | null;
+  to_weight_pct: number | null;
+  weight_delta_pp: number | null;
+  to_market_value_wan: number | null;
+  from_rank: number | null;
+  to_rank: number | null;
+}
+
+export interface PositionDiff {
+  from_version: PortfolioVersion;
+  to_version: PortfolioVersion;
+  items: PositionDiffItem[];
+}
+

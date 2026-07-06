@@ -5,8 +5,10 @@
 //! 绝不跨 `.await` 持有 DB mutex。
 
 use crate::db::Database;
-use crate::models::{FundSearchResult, Portfolio, PortfolioPosition};
-use crate::services::fund_data;
+use crate::models::{
+    FundSearchResult, Portfolio, PortfolioPosition, PortfolioVersion, PositionDiff,
+};
+use crate::services::{fund_data, position_diff};
 use tauri::State;
 
 /// 基金联想搜索（不落库）。
@@ -124,6 +126,125 @@ pub fn get_portfolio_positions(
 ) -> Result<Vec<PortfolioPosition>, String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     query_latest_positions(&conn, &portfolio_id)
+}
+
+/// 组合的持仓版本列表（按报告期降序），含各版本行数与披露口径。只读库。
+#[tauri::command(rename_all = "camelCase")]
+pub fn get_portfolio_versions(
+    db: State<Database>,
+    portfolio_id: String,
+) -> Result<Vec<PortfolioVersion>, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    query_versions(&conn, &portfolio_id)
+}
+
+/// 两个版本间的调仓对比。省略期次时默认对比最新两期；只读库、无网络请求。
+#[tauri::command(rename_all = "camelCase")]
+pub fn get_portfolio_diff(
+    db: State<Database>,
+    portfolio_id: String,
+    from_date: Option<String>,
+    to_date: Option<String>,
+) -> Result<PositionDiff, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let versions = query_versions(&conn, &portfolio_id)?;
+
+    let (from_date, to_date) = match (from_date, to_date) {
+        (Some(f), Some(t)) => (f, t),
+        (None, None) => {
+            if versions.len() < 2 {
+                return Err("该组合尚不足两期持仓数据，无法对比".to_string());
+            }
+            // versions 按日期降序：[0] 最新期，[1] 上一期
+            (versions[1].as_of_date.clone(), versions[0].as_of_date.clone())
+        }
+        _ => return Err("请同时指定起止两个报告期".to_string()),
+    };
+
+    let from_version = versions
+        .iter()
+        .find(|v| v.as_of_date == from_date)
+        .cloned()
+        .ok_or_else(|| "未找到起始报告期的持仓数据".to_string())?;
+    let to_version = versions
+        .iter()
+        .find(|v| v.as_of_date == to_date)
+        .cloned()
+        .ok_or_else(|| "未找到目标报告期的持仓数据".to_string())?;
+
+    let from_rows = query_positions_at(&conn, &portfolio_id, &from_date)?;
+    let to_rows = query_positions_at(&conn, &portfolio_id, &to_date)?;
+    let items = position_diff::compute_diff(&from_rows, &to_rows);
+
+    Ok(PositionDiff {
+        from_version,
+        to_version,
+        items,
+    })
+}
+
+fn query_versions(
+    conn: &rusqlite::Connection,
+    portfolio_id: &str,
+) -> Result<Vec<PortfolioVersion>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT as_of_date, COUNT(*) FROM portfolio_positions
+             WHERE portfolio_id = ?1
+             GROUP BY as_of_date
+             ORDER BY as_of_date DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let versions = stmt
+        .query_map(rusqlite::params![portfolio_id], |row| {
+            let as_of_date: String = row.get(0)?;
+            let row_count: i64 = row.get(1)?;
+            let coverage = position_diff::infer_coverage(&as_of_date, row_count);
+            Ok(PortfolioVersion {
+                as_of_date,
+                row_count,
+                coverage,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(versions)
+}
+
+fn query_positions_at(
+    conn: &rusqlite::Connection,
+    portfolio_id: &str,
+    as_of_date: &str,
+) -> Result<Vec<PortfolioPosition>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, portfolio_id, as_of_date, stock_code, stock_name,
+                    weight_pct, shares_wan, market_value_wan, position_rank, created_at
+             FROM portfolio_positions
+             WHERE portfolio_id = ?1 AND as_of_date = ?2
+             ORDER BY weight_pct DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    let positions = stmt
+        .query_map(rusqlite::params![portfolio_id, as_of_date], |row| {
+            Ok(PortfolioPosition {
+                id: row.get(0)?,
+                portfolio_id: row.get(1)?,
+                as_of_date: row.get(2)?,
+                stock_code: row.get(3)?,
+                stock_name: row.get(4)?,
+                weight_pct: row.get(5)?,
+                shares_wan: row.get(6)?,
+                market_value_wan: row.get(7)?,
+                position_rank: row.get(8)?,
+                created_at: row.get(9)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(positions)
 }
 
 /// 刷新的共用实现（供手动刷新与创建后的首刷调用）。
