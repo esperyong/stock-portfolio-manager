@@ -7,7 +7,7 @@
 - [x] 1.3 为 `position_diff.rs` 写单元测试：全量对全量（新建/清仓/加/减/持平各至少一例）、口径推断边界（3/9 月、6/12 月行数 34/35、全量对部分）、股数缺失回退权重、双侧缺失、HK 前导零代码、共同持股跨口径对比不受影响
 - [x] 1.4 在 `src-tauri/src/commands/portfolios.rs` 追加只读命令 `get_portfolio_versions`（按日期降序含 coverage）与 `get_portfolio_diff`（fromDate/toDate 可省略默认最新两期；不足两期报中文错误「该组合尚不足两期持仓数据，无法对比」）
 - [x] 1.5 在 `lib.rs` `invoke_handler![...]` 注册两个新命令；Docker 环境（见 tauri-test-on-this-ec2 方案）`cargo test` 全绿
-- [ ] 1.6 `fund_data.rs` 刷新改为固定双年拉取（当年+上一年，见 design D7）：保证新添加基金首刷即有多期版本可对比；重跑 `cargo test` 全绿
+- [x] 1.6 `fund_data.rs` 刷新改为固定双年拉取（当年+上一年，见 design D7）：保证新添加基金首刷即有多期版本可对比；重跑 `cargo test` 全绿
 
 ## 2. 前端
 
