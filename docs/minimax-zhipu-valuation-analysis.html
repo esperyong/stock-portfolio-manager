@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="MiniMax（00100.HK）解禁暴跌后的估值评估：与智谱近10倍市值差的归因、发行价与港股通、现价是否值得买入的可视化投研报告">
+<title>MiniMax vs 智谱：解禁暴跌后的估值差 · 00100.HK</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --page:#f0f1f4; --surface:#fbfbfc; --surface-2:#e7e9ef;
+    --ink:#15171d; --ink-2:#4c505c; --muted:#868b98;
+    --hair:#e0e2ea; --axis:#c7cad4;
+    --accent:#3a4fd6; --accent-2:#2f42c2; --accent-soft:#dee1fa;
+    --danger:#c0433a; --danger-soft:#f6ddd9; --pos:#0a7647;
+    --s-mm:#e0842f; --s-mm-soft:#f8e3cd;
+    --s-zp:#2a78d6; --s-zp-soft:#d6e5f7;
+    --s-ref:#8b90a0;
+    --shadow:0 1px 2px rgba(18,20,30,.04), 0 8px 30px rgba(18,20,30,.06);
+    --maxw:1080px; --col:760px;
+    --f-cjk: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#0e0f13; --surface:#171920; --surface-2:#20232c;
+      --ink:#eef0f6; --ink-2:#b3b8c6; --muted:#848a99;
+      --hair:#282b34; --axis:#383c48;
+      --accent:#6b7cf0; --accent-2:#8593f4; --accent-soft:#1e2340;
+      --danger:#e0685c; --danger-soft:#3a201c; --pos:#3fb57e;
+      --s-mm:#eb9a4f; --s-mm-soft:#3a2a17;
+      --s-zp:#4f95e5; --s-zp-soft:#16283e;
+      --s-ref:#767c8c;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="light"]{
+    color-scheme: light;
+    --page:#f0f1f4; --surface:#fbfbfc; --surface-2:#e7e9ef;
+    --ink:#15171d; --ink-2:#4c505c; --muted:#868b98;
+    --hair:#e0e2ea; --axis:#c7cad4;
+    --accent:#3a4fd6; --accent-2:#2f42c2; --accent-soft:#dee1fa;
+    --danger:#c0433a; --danger-soft:#f6ddd9; --pos:#0a7647;
+    --s-mm:#e0842f; --s-mm-soft:#f8e3cd;
+    --s-zp:#2a78d6; --s-zp-soft:#d6e5f7;
+    --s-ref:#8b90a0;
+    --shadow:0 1px 2px rgba(18,20,30,.04), 0 8px 30px rgba(18,20,30,.06);
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --page:#0e0f13; --surface:#171920; --surface-2:#20232c;
+    --ink:#eef0f6; --ink-2:#b3b8c6; --muted:#848a99;
+    --hair:#282b34; --axis:#383c48;
+    --accent:#6b7cf0; --accent-2:#8593f4; --accent-soft:#1e2340;
+    --danger:#e0685c; --danger-soft:#3a201c; --pos:#3fb57e;
+    --s-mm:#eb9a4f; --s-mm-soft:#3a2a17;
+    --s-zp:#4f95e5; --s-zp-soft:#16283e;
+    --s-ref:#767c8c;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.45);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--page); color:var(--ink); font-family:var(--f-cjk);
+    line-height:1.75; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px;}
+  .col{max-width:var(--col); margin-left:auto; margin-right:auto;}
+
+  header.top{position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--page) 88%, transparent);
+    backdrop-filter:saturate(1.2) blur(10px); border-bottom:1px solid var(--hair);}
+  .top-in{max-width:var(--maxw); margin:0 auto; padding:11px 24px; display:flex; align-items:center; gap:14px;}
+  .ticker{font-weight:700; letter-spacing:.02em; font-size:14px; display:flex; align-items:center; gap:9px}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--s-mm); box-shadow:0 0 0 4px var(--s-mm-soft)}
+  .ticker .code{color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums}
+  .top-spacer{flex:1}
+  .toggle{border:1px solid var(--hair); background:var(--surface); color:var(--ink-2); font:inherit;
+    font-size:13px; padding:6px 12px; border-radius:999px; cursor:pointer; display:flex; align-items:center; gap:7px}
+  .toggle:hover{border-color:var(--axis); color:var(--ink)}
+  .toggle:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  .hero{padding:70px 0 28px}
+  .eyebrow{font-size:12.5px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); display:flex; align-items:center; gap:12px; margin:0 0 22px}
+  .eyebrow::before{content:""; width:30px; height:2px; background:var(--accent); display:inline-block}
+  h1{font-size:clamp(29px, 5.2vw, 48px); line-height:1.14; letter-spacing:-.01em; font-weight:800;
+    margin:0 0 6px; text-wrap:balance}
+  h1 .hl{color:var(--s-mm)}
+  h1 .hl2{color:var(--s-zp)}
+  .dek{font-size:clamp(16px,2.3vw,19px); color:var(--ink-2); max-width:42ch; margin:20px 0 0; text-wrap:pretty}
+  .dek b{color:var(--ink); font-weight:600}
+
+  .stats{display:grid; grid-template-columns:repeat(5,1fr); gap:1px; margin:46px 0 8px;
+    background:var(--hair); border:1px solid var(--hair); border-radius:16px; overflow:hidden}
+  .stat{background:var(--surface); padding:18px 18px 16px; display:flex; flex-direction:column; gap:5px}
+  .stat .k{font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.01em}
+  .stat .v{font-size:clamp(20px,2.5vw,26px); font-weight:800; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.05}
+  .stat .s{font-size:12px; color:var(--ink-2); font-variant-numeric:tabular-nums}
+  .stat .s.up{color:var(--pos); font-weight:600}
+  .stat .s.down{color:var(--danger); font-weight:600}
+  @media(max-width:820px){.stats{grid-template-columns:repeat(2,1fr)} .stat:last-child{grid-column:1/-1}}
+
+  section{padding:34px 0}
+  .sec-head{display:flex; align-items:baseline; gap:14px; margin:0 0 18px}
+  .sec-num{font-size:13px; font-weight:800; font-variant-numeric:tabular-nums;
+    border:1px solid var(--accent-soft); background:var(--accent-soft); color:var(--accent-2);
+    width:30px; height:30px; border-radius:8px; display:grid; place-items:center; flex:none}
+  h2{font-size:clamp(21px,3vw,27px); font-weight:800; letter-spacing:-.01em; margin:0; line-height:1.25; text-wrap:balance}
+  .sec-sub{color:var(--muted); font-size:14px; margin-top:2px}
+  p{margin:0 0 16px; color:var(--ink-2)}
+  p strong, li strong{color:var(--ink); font-weight:600}
+  .lead{font-size:17.5px; color:var(--ink)}
+  a{color:var(--accent-2); text-underline-offset:2px}
+
+  .callout{border:1px solid var(--hair); background:var(--surface); border-radius:14px; padding:20px 22px; margin:20px 0;
+    box-shadow:var(--shadow); border-left:3px solid var(--accent)}
+  .callout.warn{border-left-color:var(--danger)}
+  .callout.mm{border-left-color:var(--s-mm)}
+  .callout .lbl{font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin-bottom:7px}
+  .callout.warn .lbl{color:var(--danger)}
+  .callout.mm .lbl{color:var(--s-mm)}
+  .callout p:last-child{margin-bottom:0}
+
+  figure{margin:26px 0; background:var(--surface); border:1px solid var(--hair); border-radius:16px;
+    padding:22px 22px 16px; box-shadow:var(--shadow)}
+  .fig-title{font-size:15.5px; font-weight:700; margin:0 0 2px; letter-spacing:-.005em; color:var(--ink)}
+  .fig-note{font-size:12.5px; color:var(--muted); margin:0 0 14px}
+  figcaption{font-size:12.5px; color:var(--muted); margin-top:12px; border-top:1px solid var(--hair); padding-top:10px}
+  .legend{display:flex; flex-wrap:wrap; gap:16px; margin:0 0 8px; font-size:13px; color:var(--ink-2)}
+  .legend span{display:inline-flex; align-items:center; gap:7px}
+  .legend i{width:11px; height:11px; border-radius:3px; display:inline-block; flex:none}
+  svg.chart{width:100%; height:auto; display:block; overflow:visible}
+  .grid line{stroke:var(--hair); stroke-width:1}
+  .axis-txt{fill:var(--muted); font-size:12px; font-family:var(--f-cjk)}
+  .axis-txt.tab{font-variant-numeric:tabular-nums}
+  .bar{transition:opacity .12s}
+  .dlabel{fill:var(--ink); font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; font-family:var(--f-cjk)}
+  .dlabel.sm{font-size:11px; font-weight:600; fill:var(--ink-2)}
+  .dlabel.pos{fill:var(--pos)} .dlabel.neg{fill:var(--danger)}
+  .anno{fill:var(--danger); font-size:11.5px; font-weight:700; font-family:var(--f-cjk)}
+  .anno-line{stroke:var(--danger); stroke-width:1; stroke-dasharray:3 3}
+  .ln{fill:none; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round}
+  .mk{stroke:var(--surface); stroke-width:2}
+  .hit{fill:transparent; cursor:pointer}
+
+  .tt{position:fixed; z-index:60; pointer-events:none; opacity:0; transform:translateY(4px);
+    transition:opacity .1s; background:var(--ink); color:var(--page); font-size:12.5px; line-height:1.5;
+    padding:8px 11px; border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,.28); max-width:250px; font-variant-numeric:tabular-nums}
+  .tt b{color:#fff}
+  @media (prefers-color-scheme: dark){.tt{background:#2a2d38; color:#eef0f6}}
+  :root[data-theme="dark"] .tt{background:#2a2d38; color:#eef0f6}
+  :root[data-theme="light"] .tt{background:#15171d; color:#eef0f6}
+  .tt .r{display:flex; justify-content:space-between; gap:14px}
+  .tt .swatch{display:inline-block; width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+
+  .tbl-scroll{overflow-x:auto; margin:20px 0; border:1px solid var(--hair); border-radius:14px; background:var(--surface); box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; min-width:640px; font-size:13.5px}
+  th,td{padding:11px 14px; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  th:first-child, td:first-child{text-align:left; font-variant-numeric:normal}
+  thead th{font-size:12px; color:var(--muted); font-weight:700; border-bottom:1px solid var(--axis); background:var(--surface-2)}
+  tbody td{border-bottom:1px solid var(--hair); color:var(--ink-2)}
+  tbody tr:last-child td{border-bottom:none}
+  tbody td:first-child{color:var(--ink); font-weight:600}
+  .col-mm{color:var(--s-mm)!important}
+  .col-zp{color:var(--s-zp)!important}
+  tr.hi td{background:var(--accent-soft)}
+  .up{color:var(--pos)} .down{color:var(--danger)}
+  .chip{display:inline-block; font-size:11px; font-weight:700; padding:1px 7px; border-radius:6px; background:var(--accent-soft); color:var(--accent-2)}
+  .chip.mm{background:var(--s-mm-soft); color:var(--s-mm)}
+  .chip.zp{background:var(--s-zp-soft); color:var(--s-zp)}
+
+  .pillars{display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin:20px 0}
+  @media(max-width:680px){.pillars{grid-template-columns:1fr}}
+  .pillar{background:var(--surface); border:1px solid var(--hair); border-radius:14px; padding:18px 19px; box-shadow:var(--shadow)}
+  .pillar h3{margin:0 0 8px; font-size:15.5px; font-weight:700; display:flex; gap:10px; align-items:baseline}
+  .pillar h3 .n{color:var(--accent); font-size:12px; font-weight:800; font-variant-numeric:tabular-nums; flex:none}
+  .pillar p{font-size:13.5px; margin:0; color:var(--ink-2)}
+  .pillar.bull{border-top:3px solid var(--pos)}
+  .pillar.bull h3 .n{color:var(--pos)}
+
+  ol.factors{list-style:none; counter-reset:f; padding:0; margin:20px 0; display:flex; flex-direction:column; gap:12px}
+  ol.factors li{counter-increment:f; position:relative; padding:14px 18px 14px 54px; background:var(--surface);
+    border:1px solid var(--hair); border-radius:12px; font-size:14.5px; color:var(--ink-2); box-shadow:var(--shadow)}
+  ol.factors li::before{content:counter(f); position:absolute; left:16px; top:13px; width:26px; height:26px;
+    border-radius:7px; background:var(--accent-soft); color:var(--accent-2); font-weight:800; font-size:13px;
+    display:grid; place-items:center; font-variant-numeric:tabular-nums}
+  ol.factors.risk li::before{background:var(--danger-soft); color:var(--danger)}
+  ol.factors li b{color:var(--ink)}
+
+  .verdict{background:linear-gradient(180deg, var(--surface), var(--surface-2)); border:1px solid var(--hair);
+    border-radius:18px; padding:28px 26px; margin:22px 0; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .verdict::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--accent)}
+  .verdict .q{font-size:clamp(17px,2.5vw,21px); font-weight:700; color:var(--ink); line-height:1.55; margin:0; text-wrap:pretty}
+  .verdict .q em{color:var(--accent-2); font-style:normal}
+  .verdict .q .r{color:var(--danger); font-style:normal}
+  .verdict .q .mm{color:var(--s-mm); font-style:normal}
+  .verdict .q .zp{color:var(--s-zp); font-style:normal}
+
+  .steps{list-style:none; counter-reset:s; padding:0; margin:18px 0 4px; display:flex; flex-direction:column; gap:10px}
+  .steps li{counter-increment:s; position:relative; padding:12px 16px 12px 48px; background:var(--surface);
+    border:1px solid var(--hair); border-radius:11px; font-size:14px; color:var(--ink-2)}
+  .steps li::before{content:counter(s); position:absolute; left:14px; top:11px; width:24px; height:24px; border-radius:50%;
+    background:var(--accent); color:#fff; font-weight:800; font-size:12px; display:grid; place-items:center}
+  .steps li b{color:var(--ink)}
+
+  footer{border-top:1px solid var(--hair); margin-top:40px; padding:30px 0 60px; color:var(--muted); font-size:13px}
+  footer .src{color:var(--ink-2)}
+  footer b{color:var(--ink)}
+  hr.rule{border:none; border-top:1px solid var(--hair); margin:0}
+  .spine{border-left:2px solid var(--accent-soft); padding-left:22px; margin:8px 0}
+  @media(max-width:640px){ .hero{padding:46px 0 18px} .spine{padding-left:16px} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <span class="ticker"><span class="dot"></span>MiniMax 稀宇科技 <span class="code">· 00100.HK</span></span>
+    <span class="top-spacer"></span>
+    <button class="toggle" id="themeBtn" aria-label="切换明暗主题"><span id="themeIcon">◐</span><span id="themeLbl">主题</span></button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="hero col">
+    <p class="eyebrow">投研评估 · 解禁暴跌后的估值差与买入判断</p>
+    <h1>近 10 倍市值差，<br>几乎全在<span class="hl">估值倍数</span>，<br><span class="hl2">不在收入</span></h1>
+    <p class="dek">今日 MiniMax 迎首轮解禁、盘中一度暴跌 20%。同为国产大模型头部，为何它与智谱市值差近 10 倍？<b>智谱收入只比它高约 1.3 倍，市值却高约 8 倍</b>——差的不是基本面，是市场愿意付的倍数。本报告拆清发行价、港股通、以及现价是否值得买。</p>
+
+    <div class="stats">
+      <div class="stat"><span class="k">MiniMax 发行价</span><span class="v">165 港元</span><span class="s">2026-01-09 上市</span></div>
+      <div class="stat"><span class="k">今日市值</span><span class="v">~908亿</span><span class="s down">▼ 较峰值 −78%</span></div>
+      <div class="stat"><span class="k">市销率 P/S</span><span class="v">~150x</span><span class="s">智谱 ~950x</span></div>
+      <div class="stat"><span class="k">与智谱市值差</span><span class="v">~8×</span><span class="s">营收仅差 1.3×</span></div>
+      <div class="stat"><span class="k">港股通</span><span class="v">预计 8/6</span><span class="s down">WVR 受限，未纳入</span></div>
+    </div>
+  </div>
+
+  <!-- HERO CHART: market cap gap -->
+  <div class="col">
+  <figure>
+    <p class="fig-title">市值差约 8 倍，收入只差约 1.3 倍</p>
+    <p class="fig-note">当前总市值（港元）· 2026-07-09 盘中快照 · 柱顶为市值、柱内为市销率 P/S</p>
+    <div class="legend">
+      <span><i style="background:var(--s-mm)"></i>MiniMax（00100）</span>
+      <span><i style="background:var(--s-zp)"></i>智谱（02513）</span>
+    </div>
+    <svg class="chart" id="chartCap" viewBox="0 0 760 380" role="img" aria-label="MiniMax与智谱市值对比柱状图"></svg>
+    <figcaption>10 倍的市值差几乎全部由估值倍数解释：智谱以 ~950x 市销率交易、MiniMax 仅 ~150x（OpenAI 参照约 40x）。<strong>与其说 MiniMax 太便宜，不如说智谱贵得离谱。</strong></figcaption>
+  </figure>
+  </div>
+
+  <!-- SECTION 1: three facts -->
+  <section class="col">
+    <div class="sec-head"><span class="sec-num">01</span><div><h2>先回答三个事实问题</h2><div class="sec-sub">发行价 · 发行市值 · 港股通</div></div></div>
+
+    <div class="callout mm">
+      <div class="lbl">发行价 165 港元 / 发行市值 ~500 亿港元</div>
+      <p>MiniMax 发行价 <strong>165 港元/股</strong>（定在招股区间上限，公开发售超额认购 1837 倍），对应上市发行市值 <strong>约 500 亿港元</strong>（招股书发行估值区间 461–504 亿）。首日 +109% 收 345、市值破 1050 亿；3 月一度冲到 ~1330 港元、市值约 4100 亿。今日盘中低点 289.6 港元、市值 ~908 亿——<strong>较峰值 −78%，但较发行价仍高约 75–80%</strong>。追现价，是买在比 IPO 贵近一倍、比峰值便宜约八成的位置。</p>
+    </div>
+
+    <div class="callout">
+      <div class="lbl">港股通 · 判断正确：MiniMax 尚未纳入</div>
+      <p>因 <strong>WVR（同股不同权）</strong>架构，港交所审查更严，需满足附加门槛（上市满 6 个月+20 个交易日、过去 183 交易日日均市值 ≥ 200 亿港元、期间成交额 ≥ 60 亿港元），<strong>预计最早 2026-08-06 才能开通港股通</strong>。智谱无此限制，<strong>已于 2026-06-08 纳入港股通</strong>。这也是估值差的关键——<strong>这轮 AI 双雄行情主要靠南向资金，而南向现在买不了 MiniMax。</strong></p>
+    </div>
+  </section>
+
+  <!-- SECTION 2: why 10x -->
+  <section class="col">
+    <div class="sec-head"><span class="sec-num">02</span><div><h2>为何差近 10 倍？不是收入差出来的</h2><div class="sec-sub">10 倍市值差 = 5–6 倍的估值倍数差 × 1.3 倍的收入差</div></div></div>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>维度</th><th class="col-mm">MiniMax（00100）</th><th class="col-zp">智谱（02513）</th></tr></thead>
+        <tbody>
+          <tr><td>上市日 / 发行价</td><td>2026-01-09 / 165</td><td>2026-01-08 / 116.2</td></tr>
+          <tr><td>发行市值</td><td>~500 亿</td><td>~511 亿</td></tr>
+          <tr class="hi"><td>当前市值（港元）</td><td class="col-mm"><b>~900–1000 亿</b></td><td class="col-zp"><b>~7000–8000 亿</b></td></tr>
+          <tr><td>2025 营收</td><td>~5.6 亿元（$79M，+159%）</td><td>7.24 亿元（+132%）</td></tr>
+          <tr><td>2026E 营收</td><td>~11–18 亿元（推算）</td><td class="col-zp"><b>~28 亿元（券商预测）</b></td></tr>
+          <tr class="hi"><td>市销率 P/S</td><td class="col-mm"><b>~150x</b></td><td class="col-zp"><b>~800–950x</b></td></tr>
+          <tr><td>商业模式</td><td style="text-align:left">2C 为主：Talkie/星野/海螺</td><td style="text-align:left">2B/2G：MaaS，私有化 73.7%</td></tr>
+          <tr><td>股东底色</td><td style="text-align:left">VC/财务投资人为主</td><td style="text-align:left">重国资（中关村/杭州/上海…）</td></tr>
+          <tr><td>港股通</td><td class="down">未纳入 · 预计 8/6</td><td class="up">已纳入 · 6/8</td></tr>
+          <tr><td>2025 亏损</td><td>IFRS $1.87B*</td><td>经调整净亏 31.82 亿</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fig-note">* MiniMax 的 IFRS 巨亏主要为可转换可赎回优先股公允价值变动等非现金项，IPO 后转普通股即消失，≠ 经营现金消耗；与智谱"经调整净亏损"口径不同，不可直接比大小。2026E 为券商预测 / 推算。</p>
+
+    <figure>
+      <p class="fig-title">估值倍数对比：智谱才是那个"贵"的</p>
+      <p class="fig-note">市销率 P/S（倍）· 市值 ÷ 2025 营收（同一币种口径）· 快照敏感，仅示意量级</p>
+      <svg class="chart" id="chartPS" viewBox="0 0 760 300" role="img" aria-label="市销率对比柱状图"></svg>
+      <figcaption>智谱以约 950 倍市销率交易，是 MiniMax（约 150 倍）的 6 倍多；两者均远高于 OpenAI 约 40 倍的参照。倍数差，而非收入差，才是 10 倍市值鸿沟的来源。</figcaption>
+    </figure>
+
+    <p class="lead">10 倍市值差来自五重<strong>叙事 / 资金面 / 股东结构</strong>溢价——而非收入：</p>
+    <div class="pillars">
+      <div class="pillar"><h3><span class="n">01</span>商业模式溢价</h3><p>市场给"2B/2G 私有化 + MaaS 经常性收入 + AGI 基座第一股"付高溢价；给 2C 消费应用（充值/token、留存波动大）折价。</p></div>
+      <div class="pillar"><h3><span class="n">02</span>国资光环 + 港股通</h3><p>智谱一批地方国资背书、被当"国家队"，且已进港股通能吃<b>南向资金</b>；MiniMax 被挡在最大增量买家门外直到 8 月。</p></div>
+      <div class="pillar"><h3><span class="n">03</span>流通盘与筹码</h3><p>解禁前 MiniMax 流通盘极小易逼空；智谱解禁大头是国资、明确长期持有、抛压小；MiniMax 的 VC/基石有强烈变现诉求。</p></div>
+      <div class="pillar"><h3><span class="n">04</span>叙事 + 情绪</h3><p>智谱=最接近 OpenAI 的国产标的；MiniMax 近期踩雷——大幅涨价、被 Anthropic 指"蒸馏"、M3 基准被质疑，压制估值。</p></div>
+    </div>
+
+    <div class="callout">
+      <div class="lbl">回应"智谱 coding plan 卖爆 → 2026 营收反超"</div>
+      <p><strong>方向对，但"远超"高估了差距。</strong>智谱 GLM Coding Plan 是最扎实的商业化飞轮——全球付费开发者破 <strong>24.2 万</strong>、Token 6 个月涨 <strong>15 倍</strong>，涨价 30–60% 后调用量仍 +400%，GLM-5.2 比 Claude 便宜约 80% 持续售罄，云端收入 +293%；券商预测 2026E 营收 <strong>~28 亿元</strong>。但 MiniMax 并不弱：2025 增速 <strong>+159%</strong>（快于智谱 +132%）、ARR 已超 $1.5 亿、73% 收入来自海外。<strong>即便智谱 2026 营收更高，量级约为 MiniMax 的 1.5–2.5 倍，远小于 ~8 倍的市值差——收入解释不了 10 倍鸿沟，溢价仍在倍数与叙事。</strong></p>
+    </div>
+  </section>
+
+  <!-- SECTION 3: today's unlock -->
+  <section class="col">
+    <div class="sec-head"><span class="sec-num">03</span><div><h2>今日解禁的准确画面</h2><div class="sec-sub">流通盘 5% → 46%，供给近 10 倍；盘中 −20% 尾盘 +3.75%</div></div></div>
+    <p>今日为 MiniMax 首轮解禁，<strong>解禁 1.07 亿股，流通盘从约 5% 一次性放大到约 46%</strong>（IPO 前 14 家基石合计占 67.9%，均今日解禁）。盘中一度跌超 20% 至 289.6 港元、市值破千亿，<strong>但尾盘被买回、收涨约 +3.75%</strong>——供给冲击当日被承接。对照智谱 7/8 解禁涨超 13%（大头为国资、长期持有），今日再涨约 15%（盘中 +20%）并趁势按 1588 港元配售融资。</p>
+
+    <figure>
+      <p class="fig-title">MiniMax 价格轨迹：暴跌是相对峰值，不是跌破发行价</p>
+      <p class="fig-note">股价（港元）· 关键节点 · 今日取盘中低点 289.6</p>
+      <svg class="chart" id="chartPrice" viewBox="0 0 760 320" role="img" aria-label="MiniMax股价关键节点折线图"></svg>
+      <figcaption>发行价 165 → 首日收 345 → 3 月峰值 ~1330 → 今日 ~290。较峰值回撤约 78%，但仍比发行价高约 75–80%。</figcaption>
+    </figure>
+
+    <figure>
+      <p class="fig-title">解禁与港股通事件日历</p>
+      <p class="fig-note">示意时间轴（按事件排序）· 蓝=智谱 橙=MiniMax 红=今日 紫=催化剂</p>
+      <svg class="chart" id="chartTimeline" viewBox="0 0 760 250" role="img" aria-label="解禁与港股通事件时间轴"></svg>
+      <figcaption><strong>8/6 是关键催化剂</strong>：MiniMax 预计届时纳入港股通，南向资金方可买入——这是这轮行情最强的边际买家。</figcaption>
+    </figure>
+  </section>
+
+  <!-- SECTION 4: buy or not -->
+  <section class="col">
+    <div class="sec-head"><span class="sec-num">04</span><div><h2>现价是否值得买？事件驱动博弈，非价值入场</h2><div class="sec-sub">相对智谱便宜，但绝对估值仍贵</div></div></div>
+
+    <p class="lead">支持买的理由（多头）：</p>
+    <div class="pillars">
+      <div class="pillar bull"><h3><span class="n">01</span>相对估值</h3><p>P/S ~150x vs 智谱 ~950x，若板块继续被追捧或价差收敛，MiniMax 向上空间更大。</p></div>
+      <div class="pillar bull"><h3><span class="n">02</span>8/6 港股通催化剂</h3><p>纳入后南向可买，是最强边际买家。大摩估两家合计带来约 12.5–17.5 亿美元被动增量。</p></div>
+      <div class="pillar bull"><h3><span class="n">03</span>已挤掉大量泡沫</h3><p>较峰值 −78%（1330→~290），今日解禁抛压尾盘被承接，说明有接盘力量。</p></div>
+      <div class="pillar bull"><h3><span class="n">04</span>产品有真东西</h3><p>海螺视频、Talkie 出海、3 亿+ 用户、100 万+ 企业客户、B 端收入占比 &gt;30%。</p></div>
+    </div>
+
+    <div class="callout warn">
+      <div class="lbl">需警惕（空头）</div>
+      <p>①<strong> 仍比发行价贵约 80%</strong>——追进去是买在反弹上；② <strong>解禁抛压未尽</strong>：46% 流通盘刚放出，VC/基石有变现动机，后续还有波次；③ <strong>基本面仍贵</strong>：150x P/S + 2025 亏 133 亿且扩大、现金消耗快；④ <strong>叙事劣势</strong>：无国资光环、2C 非 2B/2G、信任事件缠身；⑤ <strong>"利好兑现即卖出"</strong>：入通预期部分已反映，历史上正式入通后常见获利了结。</p>
+    </div>
+
+    <p class="lead">若要参与，理性做法：</p>
+    <ol class="steps">
+      <li><b>仓位要小</b>——当高风险博弈仓，不当核心持仓。</li>
+      <li><b>等抛压衰竭</b>——看接下来几天/几周是否放量见底、日线企稳，别在解禁潮里接飞刀。</li>
+      <li><b>8/6 前布局</b>——但别把身家押在单一催化剂上。</li>
+      <li><b>认清代价</b>——你是在为一家仍在扩大亏损的 2C 公司付 ~150 倍市销率，"比泡沫便宜"不等于"便宜"。</li>
+    </ol>
+
+    <div class="verdict">
+      <p class="q">现价 <em>偏谨慎 / 中性</em>：这是一笔<em>围绕 8/6 港股通的事件型高风险博弈，不是价值入场</em>。<br><br>若"<span class="mm">MiniMax</span> vs <span class="zp">智谱</span>二选一"，我反而认为<span class="zp">智谱</span>下行风险更大（~950x 极端估值 + 刚解禁 + 回 A 扰动），只是它有国资 / 港股通 / 国家队叙事托底。两者更可能的收敛路径是 <span class="r">智谱下杀</span> 而非 <span class="mm">MiniMax 补涨</span>——请把这点放进你的仓位假设里。</p>
+    </div>
+  </section>
+
+  <footer class="col">
+    <hr class="rule">
+    <p style="margin-top:22px"><b>信源与方法</b> · 本文由多路检索 + 交叉核验生成。价格 / 市值为 <b>2026-07-09 盘中快照</b>，随行情实时变动；P/S 对价格快照敏感，引用须带日期。</p>
+    <p class="src">主要信源：华尔街见闻、财新、量子位、观察者网、新浪财经 / 新浪科技（MiniMax IPO 165 港元与发行估值、2026-07-09 解禁行情、智谱同日配售）；证券时报（智谱 IPO 116.2 港元、2025 营收 7.24 亿 / ARR 17 亿）；21 世纪经济报道、财联社（WVR 港股通门槛与 8/6 时点）；澎湃、letschuhai、hk01（2B vs 2C 对比与亏损、市销率）。</p>
+    <p class="src" style="color:var(--muted)">口径提示：MiniMax 营收按美元、智谱按人民币披露，P/S 已折算至港元同一口径；市值取区间中值，智谱峰值曾破万亿（对应 P/S &gt;1200x）；南向资金规模、被动增量、OpenAI ~40x 参照为第三方估算。</p>
+    <p style="color:var(--muted); margin-top:14px">研究时间 2026-07-09 · 仅作投研分析讨论，<b>不构成任何投资建议</b>。下单前请再核对实时报价与最新解禁 / 入通公告。</p>
+  </footer>
+
+</main>
+
+<div class="tt" id="tt" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  "use strict";
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, txt){
+    var e = document.createElementNS(SVGNS, tag);
+    if(attrs) for(var k in attrs) e.setAttribute(k, attrs[k]);
+    if(txt!=null) e.textContent = txt;
+    return e;
+  }
+  var tt = document.getElementById("tt");
+  function showTip(html, evt){
+    tt.innerHTML = html;
+    tt.style.opacity = "1";
+    var pad = 14, w = tt.offsetWidth, h = tt.offsetHeight;
+    var x = evt.clientX + pad, y = evt.clientY + pad;
+    if(x + w > window.innerWidth - 8) x = evt.clientX - w - pad;
+    if(y + h > window.innerHeight - 8) y = evt.clientY - h - pad;
+    tt.style.left = x + "px"; tt.style.top = y + "px";
+  }
+  function hideTip(){ tt.style.opacity = "0"; }
+  function attachTip(node, html){
+    node.addEventListener("mousemove", function(e){ showTip(html, e); });
+    node.addEventListener("mouseleave", hideTip);
+  }
+  function sw(varName){ return '<span class="swatch" style="background:var('+varName+')"></span>'; }
+
+  // ---------- MARKET CAP bars ----------
+  (function(){
+    var W=760,H=380, m={t:40,r:16,b:44,l:52};
+    var iw=W-m.l-m.r, ih=H-m.t-m.b;
+    var data=[
+      {name:"MiniMax", code:"00100", cap:908, rev:"~5.6亿元 ($79M, +159%)", ps:"~150x", color:"var(--s-mm)", loss:"IFRS $1.87B（多为优先股公允价值变动）"},
+      {name:"智谱", code:"02513", cap:7500, rev:"7.24亿元 (+132%)", ps:"~950x", color:"var(--s-zp)", loss:"经调整净亏 31.82亿"}
+    ];
+    var max=8000;
+    var svg=document.getElementById("chartCap");
+    var g=el("g",{transform:"translate("+m.l+","+m.t+")"}); svg.appendChild(g);
+    var gg=el("g",{class:"grid"}); g.appendChild(gg);
+    [0,2000,4000,6000,8000].forEach(function(v){
+      var y=ih - v/max*ih;
+      gg.appendChild(el("line",{x1:0,y1:y,x2:iw,y2:y}));
+      g.appendChild(el("text",{x:-10,y:y+4,"text-anchor":"end",class:"axis-txt tab"}, v));
+    });
+    var bandW=iw/data.length, barW=Math.min(120, bandW*0.42);
+    data.forEach(function(d,i){
+      var cx=i*bandW+bandW/2, h=d.cap/max*ih;
+      var b=el("rect",{class:"bar",x:cx-barW/2,y:ih-h,width:barW,height:h,rx:5,fill:d.color});
+      g.appendChild(b);
+      g.appendChild(el("text",{x:cx,y:ih-h-24,"text-anchor":"middle",class:"dlabel"}, "~"+d.cap+"亿港元"));
+      g.appendChild(el("text",{x:cx,y:ih-h-8,"text-anchor":"middle",class:"dlabel sm"}, "P/S "+d.ps));
+      g.appendChild(el("text",{x:cx,y:ih+22,"text-anchor":"middle",class:"dlabel"}, d.name));
+      g.appendChild(el("text",{x:cx,y:ih+38,"text-anchor":"middle",class:"axis-txt tab"}, d.code+".HK"));
+      attachTip(b, "<b>"+d.name+"（"+d.code+"）</b><div class='r'><span>"+sw(i===0?"--s-mm":"--s-zp")+"当前市值</span><b>~"+d.cap+"亿港元</b></div><div class='r'><span>2025 营收</span><b>"+d.rev+"</b></div><div class='r'><span>市销率</span><b>"+d.ps+"</b></div><div class='r'><span>2025 亏损</span><b>"+d.loss+"</b></div>");
+    });
+    // ratio annotation between bars
+    var x1=0*bandW+bandW/2, x2=1*bandW+bandW/2;
+    var yTop=ih - 908/max*ih;
+    g.appendChild(el("line",{class:"anno-line",x1:x1,y1:yTop-40,x2:x2,y2:yTop-40}));
+    g.appendChild(el("text",{x:(x1+x2)/2,y:yTop-46,"text-anchor":"middle",class:"anno"},"市值 ~8×  ·  收入仅 ~1.3×"));
+    g.appendChild(el("text",{x:-10,y:-18,"text-anchor":"start",class:"axis-txt"},"亿港元"));
+  })();
+
+  // ---------- P/S bars ----------
+  (function(){
+    var W=760,H=300, m={t:28,r:16,b:44,l:52};
+    var iw=W-m.l-m.r, ih=H-m.t-m.b;
+    var data=[
+      {name:"OpenAI（参照）", ps:40, color:"var(--s-ref)"},
+      {name:"MiniMax", ps:150, color:"var(--s-mm)"},
+      {name:"智谱", ps:950, color:"var(--s-zp)"}
+    ];
+    var max=1000;
+    var svg=document.getElementById("chartPS");
+    var g=el("g",{transform:"translate("+m.l+","+m.t+")"}); svg.appendChild(g);
+    var gg=el("g",{class:"grid"}); g.appendChild(gg);
+    [0,250,500,750,1000].forEach(function(v){
+      var y=ih - v/max*ih;
+      gg.appendChild(el("line",{x1:0,y1:y,x2:iw,y2:y}));
+      g.appendChild(el("text",{x:-10,y:y+4,"text-anchor":"end",class:"axis-txt tab"}, v));
+    });
+    var bandW=iw/data.length, barW=Math.min(96, bandW*0.42);
+    data.forEach(function(d,i){
+      var cx=i*bandW+bandW/2, h=d.ps/max*ih;
+      var b=el("rect",{class:"bar",x:cx-barW/2,y:ih-h,width:barW,height:h,rx:5,fill:d.color});
+      g.appendChild(b);
+      g.appendChild(el("text",{x:cx,y:ih-h-9,"text-anchor":"middle",class:"dlabel"}, "~"+d.ps+"x"));
+      g.appendChild(el("text",{x:cx,y:ih+22,"text-anchor":"middle",class:"dlabel sm"}, d.name));
+      attachTip(b, "<b>"+d.name+"</b><div class='r'><span>市销率 P/S</span><b>~"+d.ps+"x</b></div>");
+    });
+    g.appendChild(el("text",{x:-10,y:-14,"text-anchor":"start",class:"axis-txt"},"P/S 倍"));
+  })();
+
+  // ---------- PRICE trajectory ----------
+  (function(){
+    var W=760,H=320, m={t:34,r:24,b:44,l:46};
+    var iw=W-m.l-m.r, ih=H-m.t-m.b;
+    var pts=[
+      {lbl:"发行价", date:"2026-01-09", v:165},
+      {lbl:"首日收盘", date:"2026-01-09", v:345},
+      {lbl:"3月峰值", date:"2026-03", v:1330},
+      {lbl:"今日", date:"2026-07-09", v:290}
+    ];
+    var max=1400;
+    function Y(v){ return ih - v/max*ih; }
+    var svg=document.getElementById("chartPrice");
+    var g=el("g",{transform:"translate("+m.l+","+m.t+")"}); svg.appendChild(g);
+    var gg=el("g",{class:"grid"}); g.appendChild(gg);
+    [0,350,700,1050,1400].forEach(function(v){
+      gg.appendChild(el("line",{x1:0,y1:Y(v),x2:iw,y2:Y(v)}));
+      g.appendChild(el("text",{x:-10,y:Y(v)+4,"text-anchor":"end",class:"axis-txt tab"}, v));
+    });
+    // issue-price reference line
+    g.appendChild(el("line",{x1:0,y1:Y(165),x2:iw,y2:Y(165),stroke:"var(--s-mm)","stroke-width":1,"stroke-dasharray":"4 4",opacity:.7}));
+    g.appendChild(el("text",{x:iw,y:Y(165)-6,"text-anchor":"end",class:"dlabel sm",fill:"var(--s-mm)"},"发行价 165"));
+    var step=iw/(pts.length-1);
+    function X(i){ return i*step; }
+    var d="";
+    pts.forEach(function(p,i){ d += (i===0?"M":"L")+X(i)+","+Y(p.v); });
+    g.appendChild(el("path",{class:"ln",d:d,stroke:"var(--s-mm)"}));
+    pts.forEach(function(p,i){
+      var isPeak=(i===2), isNow=(i===3);
+      var c=el("circle",{class:"mk",cx:X(i),cy:Y(p.v),r:(isPeak||isNow)?6:4.5,
+        fill: isNow?"var(--danger)":"var(--s-mm)"});
+      g.appendChild(c);
+      var yoff = (i===0) ? 22 : -12;
+      g.appendChild(el("text",{x:X(i),y:Y(p.v)+yoff,"text-anchor":"middle",class:"dlabel"+(isNow?" neg":"")}, p.v));
+      g.appendChild(el("text",{x:X(i),y:ih+22,"text-anchor":"middle",class:"axis-txt"}, p.lbl));
+      var hit=el("circle",{class:"hit",cx:X(i),cy:Y(p.v),r:18}); g.appendChild(hit);
+      attachTip(hit, "<b>"+p.lbl+"</b><div class='r'><span>"+p.date+"</span><b>"+p.v+" 港元</b></div>");
+    });
+    // drawdown annotation from peak to now
+    g.appendChild(el("text",{x:X(2.5),y:Y(1330)+2,"text-anchor":"middle",class:"anno"},"较峰值 −78%"));
+    g.appendChild(el("text",{x:-10,y:-16,"text-anchor":"start",class:"axis-txt"},"港元"));
+  })();
+
+  // ---------- EVENT timeline ----------
+  (function(){
+    var W=760,H=250, m={l:34,r:34};
+    var baseY=128;
+    var ev=[
+      {date:"2026-01-08", t:"智谱 IPO", s:"发行价 116.2", c:"var(--s-zp)"},
+      {date:"2026-01-09", t:"MiniMax IPO", s:"发行价 165", c:"var(--s-mm)"},
+      {date:"2026-06-08", t:"智谱入港股通", s:"+恒生科技指数", c:"var(--s-zp)"},
+      {date:"2026-07-08", t:"智谱首轮解禁", s:"当日 +13%", c:"var(--s-zp)"},
+      {date:"2026-07-09", t:"MiniMax 解禁 · 今日", s:"盘中 −20% 尾盘 +3.75%", c:"var(--danger)", big:true},
+      {date:"2026-08-06", t:"MiniMax 入港股通", s:"预计 · 催化剂", c:"var(--accent)"}
+    ];
+    var svg=document.getElementById("chartTimeline");
+    var g=el("g",{}); svg.appendChild(g);
+    var x0=m.l, x1=W-m.r, span=x1-x0;
+    var n=ev.length, step=span/(n-1);
+    // baseline
+    g.appendChild(el("line",{x1:x0,y1:baseY,x2:x1,y2:baseY,stroke:"var(--axis)","stroke-width":2}));
+    // highlight segment from MiniMax unlock -> 港股通 (南向可买)
+    g.appendChild(el("line",{x1:x0+4*step,y1:baseY,x2:x0+5*step,y2:baseY,stroke:"var(--accent)","stroke-width":3,opacity:.55}));
+    ev.forEach(function(e,i){
+      var x=x0+i*step;
+      var up = (i%2===0);
+      var r = e.big?7:5;
+      // connector
+      var ly = up ? baseY-24 : baseY+24;
+      g.appendChild(el("line",{x1:x,y1:baseY,x2:x,y2:ly,stroke:e.c,"stroke-width":1.5,opacity:.5}));
+      var dot=el("circle",{cx:x,cy:baseY,r:r,fill:e.c,stroke:"var(--surface)","stroke-width":2});
+      g.appendChild(dot);
+      if(e.big){ g.appendChild(el("circle",{cx:x,cy:baseY,r:r+5,fill:"none",stroke:e.c,"stroke-width":1.5,opacity:.5})); }
+      // labels
+      var ty = up ? baseY-32 : baseY+42;
+      var tdate = up ? baseY-64 : baseY+58;
+      g.appendChild(el("text",{x:x,y:up?tdate:tdate,"text-anchor":"middle",class:"axis-txt tab"}, e.date.slice(5)));
+      g.appendChild(el("text",{x:x,y:up?(tdate+16):(ty-8),"text-anchor":"middle",class:"dlabel sm",fill:e.c}, e.t));
+      g.appendChild(el("text",{x:x,y:up?(tdate+31):(ty+8),"text-anchor":"middle",class:"axis-txt"}, e.s));
+    });
+  })();
+
+  // ---------- theme toggle ----------
+  (function(){
+    var btn=document.getElementById("themeBtn");
+    var icon=document.getElementById("themeIcon");
+    var lbl=document.getElementById("themeLbl");
+    function cur(){
+      var attr=document.documentElement.getAttribute("data-theme");
+      if(attr) return attr;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark":"light";
+    }
+    function apply(t){
+      document.documentElement.setAttribute("data-theme", t);
+      icon.textContent = t==="dark" ? "☾" : "☀";
+      lbl.textContent = t==="dark" ? "深色" : "浅色";
+    }
+    apply(cur());
+    btn.addEventListener("click", function(){ apply(cur()==="dark"?"light":"dark"); });
+  })();
+})();
+</script>
+</body>
+</html>
