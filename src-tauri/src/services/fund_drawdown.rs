@@ -101,12 +101,21 @@ pub fn analyze(
     };
 
     let hmdd = full.max_drawdown; // 负百分比
-    // 信号线净值 L = 峰值 × (1 − |HMDD|)；hmdd 为负，故 1 + hmdd/100 = 1 − |hmdd|/100。
+    // 信号线（复权净值）L = 峰值 × (1 − |HMDD|)；hmdd 为负，故 1 + hmdd/100 = 1 − |hmdd|/100。
     let threshold_nav = peak_nav * (1.0 + hmdd / 100.0);
     let distance_to_signal_pct = if latest_adjusted_nav > 0.0 {
         (latest_adjusted_nav - threshold_nav) / latest_adjusted_nav * 100.0
     } else {
         0.0
+    };
+
+    // 信号线对应的单位净值：当下同一时点单位/复权净值比例固定，按该比例把信号线折回单位净值口径，
+    // 供用户对照平台申购净值（假设期间无分红）。
+    let latest_unit_nav = latest.unit_nav;
+    let threshold_unit_nav = if latest_adjusted_nav > 0.0 {
+        latest_unit_nav.map(|u| u * threshold_nav / latest_adjusted_nav)
+    } else {
+        None
     };
 
     // 三档信号（负值比较；更深的回撤=更小的负数）。hmdd≈0（如货基）直接 NORMAL。
@@ -151,6 +160,7 @@ pub fn analyze(
         start_date,
         latest_date,
         latest_adjusted_nav,
+        latest_unit_nav,
         peak_nav,
         max_drawdown: hmdd,
         peak_date: full.peak_date,
@@ -158,6 +168,7 @@ pub fn analyze(
         recovery_date: full.recovery_date,
         current_drawdown,
         threshold_nav,
+        threshold_unit_nav,
         distance_to_signal_pct,
         signal_state,
         approaching_ratio: APPROACHING_RATIO,
@@ -183,6 +194,33 @@ mod tests {
                 daily_return: None,
             })
             .collect()
+    }
+
+    /// 复权净值与单位净值分叉的构造器（模拟有分红的基金）。
+    fn mk(date: &str, adjusted: f64, unit: f64) -> FundNavPoint {
+        FundNavPoint {
+            nav_date: date.to_string(),
+            unit_nav: Some(unit),
+            acc_nav: Some(unit),
+            adjusted_nav: adjusted,
+            daily_return: None,
+        }
+    }
+
+    #[test]
+    fn test_threshold_unit_nav_conversion() {
+        // 复权序列 100→50→100→80(最新)，HMDD=-50%、信号线复权=50；
+        // 最新单位净值 4.0（复权 80），信号线对应单位净值 = 4.0 × 50/80 = 2.5。
+        let s = vec![
+            mk("2020-01-01", 100.0, 5.0),
+            mk("2021-01-01", 50.0, 2.5),
+            mk("2022-01-01", 100.0, 5.0),
+            mk("2023-01-01", 80.0, 4.0),
+        ];
+        let a = analyze("161005", None, &s).unwrap();
+        assert!((a.threshold_nav - 50.0).abs() < 1e-6);
+        assert_eq!(a.latest_unit_nav, Some(4.0));
+        assert!((a.threshold_unit_nav.unwrap() - 2.5).abs() < 1e-6);
     }
 
     #[test]

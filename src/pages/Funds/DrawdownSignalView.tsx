@@ -226,9 +226,23 @@ export default function DrawdownSignalView({ portfolioId }: { portfolioId: strin
           precision={1}
           suffix="%"
         />
-        <Statistic title="信号线净值" value={analysis.threshold_nav} precision={4} />
-        <Statistic title="最新净值(复权)" value={analysis.latest_adjusted_nav} precision={4} />
+        <Statistic
+          title="当前净值"
+          value={analysis.latest_unit_nav ?? analysis.latest_adjusted_nav}
+          precision={4}
+        />
+        <Statistic
+          title="信号线对应净值"
+          value={analysis.threshold_unit_nav ?? analysis.threshold_nav}
+          precision={4}
+          valueStyle={{ color: "#389e0d" }}
+        />
       </Space>
+      <Text type="secondary" style={{ display: "block", marginTop: 4, fontSize: 12 }}>
+        「当前净值/信号线对应净值」均为平台申购口径的<b>单位净值</b>：单位净值跌到约{" "}
+        {(analysis.threshold_unit_nav ?? analysis.threshold_nav).toFixed(4)} 即触发定投（假设期间无分红）。
+        回撤计算另用复权净值，见下方明细。
+      </Text>
 
       {analysis.history_too_short && (
         <Alert
@@ -250,6 +264,12 @@ export default function DrawdownSignalView({ portfolioId }: { portfolioId: strin
         </Descriptions.Item>
         <Descriptions.Item label="净值区间">
           {analysis.start_date} ~ {analysis.latest_date}
+        </Descriptions.Item>
+        <Descriptions.Item label="当前净值(复权)">
+          {analysis.latest_adjusted_nav.toFixed(4)}
+        </Descriptions.Item>
+        <Descriptions.Item label="信号线(复权)">
+          {analysis.threshold_nav.toFixed(4)}
         </Descriptions.Item>
       </Descriptions>
 

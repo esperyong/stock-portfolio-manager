@@ -836,6 +836,8 @@ export interface FundDrawdownAnalysis {
   start_date: string;
   latest_date: string;
   latest_adjusted_nav: number;
+  /** 最新单位净值（平台申购净值，供对照；可能为 null） */
+  latest_unit_nav: number | null;
   peak_nav: number;
   /** 全历史最大回撤 HMDD（负百分比） */
   max_drawdown: number;
@@ -844,8 +846,10 @@ export interface FundDrawdownAnalysis {
   recovery_date: string | null;
   /** 当前回撤 CDD（负百分比） */
   current_drawdown: number;
-  /** 历史最大回撤信号线净值 L = 峰值 × (1 − |HMDD|) */
+  /** 历史最大回撤信号线（复权净值） L = 峰值 × (1 − |HMDD|) */
   threshold_nav: number;
+  /** 信号线对应的单位净值（跌到此值即触发定投，假设期间无分红；可能为 null） */
+  threshold_unit_nav: number | null;
   /** 距触线还需下跌的百分比（正=尚需下跌；≤0=已在触线下方） */
   distance_to_signal_pct: number;
   signal_state: FundSignalState;

@@ -115,6 +115,8 @@ pub struct FundDrawdownAnalysis {
     pub latest_date: String,
     /// 最新复权净值。
     pub latest_adjusted_nav: f64,
+    /// 最新单位净值（平台申购时显示的净值，供用户直接对照；可能缺失）。
+    pub latest_unit_nav: Option<f64>,
     /// 历史最高复权净值（当前运行峰值）。
     pub peak_nav: f64,
     /// 全历史最大回撤（负百分比，HMDD）。
@@ -124,8 +126,11 @@ pub struct FundDrawdownAnalysis {
     pub recovery_date: Option<String>,
     /// 当前回撤（负百分比，CDD = (最新−峰值)/峰值）。
     pub current_drawdown: f64,
-    /// 历史最大回撤信号线净值 L = 峰值 × (1 − |HMDD|)。
+    /// 历史最大回撤信号线（复权净值）L = 峰值 × (1 − |HMDD|)。
     pub threshold_nav: f64,
+    /// 信号线对应的**单位净值**（供用户对照平台净值：跌到此值即触发定投）。
+    /// = 最新单位净值 × (threshold_nav / latest_adjusted_nav)，假设期间无分红；可能缺失。
+    pub threshold_unit_nav: Option<f64>,
     /// 距触线还需下跌的百分比（正=尚需下跌该幅度；≤0=已在触线下方）。
     pub distance_to_signal_pct: f64,
     pub signal_state: String,
