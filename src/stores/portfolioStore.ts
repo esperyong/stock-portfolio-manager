@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  FundDrawdownAnalysis,
   FundSearchResult,
   Portfolio,
   PortfolioPosition,
@@ -16,11 +17,15 @@ interface PortfolioState {
   versions: Record<string, PortfolioVersion[]>;
   /** portfolio_id -> 最近一次请求的调仓对比结果 */
   diffs: Record<string, PositionDiff>;
+  /** portfolio_id -> 最大回撤 + 定投信号分析 */
+  drawdowns: Record<string, FundDrawdownAnalysis>;
   searchResults: FundSearchResult[];
   loading: boolean;
   searching: boolean;
   /** 正在刷新的组合 id（同一时刻只允许刷新一个） */
   refreshingId: string | null;
+  /** 正在刷新净值的组合 id */
+  refreshingNavId: string | null;
   error: string | null;
   searchError: string | null;
   fetchPortfolios: () => Promise<void>;
@@ -32,6 +37,10 @@ interface PortfolioState {
   fetchPositions: (id: string) => Promise<void>;
   fetchVersions: (id: string) => Promise<PortfolioVersion[]>;
   fetchDiff: (id: string, fromDate?: string, toDate?: string) => Promise<PositionDiff>;
+  /** 抓取净值并返回最新回撤/信号分析（网络请求，手动触发） */
+  refreshFundNav: (id: string) => Promise<FundDrawdownAnalysis>;
+  /** 只读库：取回撤/信号分析（离线可用） */
+  fetchFundDrawdown: (id: string) => Promise<FundDrawdownAnalysis>;
 }
 
 export const usePortfolioStore = create<PortfolioState>((set, get) => ({
@@ -39,10 +48,12 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
   positions: {},
   versions: {},
   diffs: {},
+  drawdowns: {},
   searchResults: [],
   loading: false,
   searching: false,
   refreshingId: null,
+  refreshingNavId: null,
   error: null,
   searchError: null,
 
@@ -130,5 +141,30 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
     });
     set((state) => ({ diffs: { ...state.diffs, [id]: diff } }));
     return diff;
+  },
+
+  refreshFundNav: async (id) => {
+    set({ refreshingNavId: id });
+    try {
+      const analysis = await invoke<FundDrawdownAnalysis>("refresh_fund_nav", {
+        portfolioId: id,
+      });
+      set((state) => ({
+        drawdowns: { ...state.drawdowns, [id]: analysis },
+        refreshingNavId: null,
+      }));
+      return analysis;
+    } catch (err) {
+      set({ refreshingNavId: null });
+      throw err;
+    }
+  },
+
+  fetchFundDrawdown: async (id) => {
+    const analysis = await invoke<FundDrawdownAnalysis>("get_fund_drawdown", {
+      portfolioId: id,
+    });
+    set((state) => ({ drawdowns: { ...state.drawdowns, [id]: analysis } }));
+    return analysis;
   },
 }));

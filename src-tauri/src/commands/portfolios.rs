@@ -6,9 +6,10 @@
 
 use crate::db::Database;
 use crate::models::{
-    FundSearchResult, Portfolio, PortfolioPosition, PortfolioVersion, PositionDiff,
+    FundDrawdownAnalysis, FundNavPoint, FundSearchResult, Portfolio, PortfolioPosition,
+    PortfolioVersion, PositionDiff,
 };
-use crate::services::{fund_data, position_diff};
+use crate::services::{fund_data, fund_drawdown, position_diff};
 use tauri::State;
 
 /// 基金联想搜索（不落库）。
@@ -181,6 +182,133 @@ pub fn get_portfolio_diff(
         to_version,
         items,
     })
+}
+
+/// 手动刷新基金净值：一次抓取全量复权净值历史、幂等落库，
+/// 返回最新的最大回撤与定投信号分析。网络抓取在无锁下完成，落库才短暂加锁。
+/// 不更新 `last_refreshed_at`（该字段表示持仓刷新时间；净值新鲜度由分析里的 `latest_date` 体现）。
+#[tauri::command(rename_all = "camelCase")]
+pub async fn refresh_fund_nav(
+    db: State<'_, Database>,
+    portfolio_id: String,
+) -> Result<FundDrawdownAnalysis, String> {
+    let (fund_code, fund_type) = {
+        let conn = db.conn.lock().map_err(|e| e.to_string())?;
+        conn.query_row(
+            "SELECT fund_code, fund_type FROM portfolios WHERE id = ?1 AND source_type = 'FUND'",
+            rusqlite::params![portfolio_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .map_err(|_| "未找到该基金组合".to_string())?
+    }; // 锁在网络请求前释放
+    let fund_code = fund_code.ok_or_else(|| "该组合缺少基金代码，无法刷新".to_string())?;
+
+    let nav = fund_data::fetch_fund_nav_history(&fund_code).await?;
+
+    {
+        let conn = db.conn.lock().map_err(|e| e.to_string())?;
+        store_fund_nav(&conn, &portfolio_id, &nav)?;
+    }
+
+    fund_drawdown::analyze(&fund_code, fund_type, &nav)
+}
+
+/// 只读库：计算并返回该基金的最大回撤与定投信号（不发起网络请求，离线可用）。
+#[tauri::command(rename_all = "camelCase")]
+pub fn get_fund_drawdown(
+    db: State<Database>,
+    portfolio_id: String,
+) -> Result<FundDrawdownAnalysis, String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    let (fund_code, fund_type) = conn
+        .query_row(
+            "SELECT fund_code, fund_type FROM portfolios WHERE id = ?1 AND source_type = 'FUND'",
+            rusqlite::params![portfolio_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .map_err(|_| "未找到该基金组合".to_string())?;
+    let fund_code = fund_code.ok_or_else(|| "该组合缺少基金代码".to_string())?;
+
+    let nav = query_fund_nav(&conn, &portfolio_id)?;
+    if nav.is_empty() {
+        return Err("该基金尚未抓取净值，请先点击「刷新净值」".to_string());
+    }
+    fund_drawdown::analyze(&fund_code, fund_type, &nav)
+}
+
+/// 幂等 upsert 净值序列（单事务批量写，~数千行）。
+fn store_fund_nav(
+    conn: &rusqlite::Connection,
+    portfolio_id: &str,
+    nav: &[FundNavPoint],
+) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    {
+        let mut stmt = tx
+            .prepare(
+                "INSERT INTO fund_nav_history
+                     (portfolio_id, nav_date, unit_nav, acc_nav, adjusted_nav, daily_return)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(portfolio_id, nav_date) DO UPDATE SET
+                     unit_nav = excluded.unit_nav,
+                     acc_nav = excluded.acc_nav,
+                     adjusted_nav = excluded.adjusted_nav,
+                     daily_return = excluded.daily_return",
+            )
+            .map_err(|e| e.to_string())?;
+        for p in nav {
+            stmt.execute(rusqlite::params![
+                portfolio_id,
+                p.nav_date,
+                p.unit_nav,
+                p.acc_nav,
+                p.adjusted_nav,
+                p.daily_return
+            ])
+            .map_err(|e| format!("净值数据写入失败：{}", e))?;
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 只读库：按 `nav_date` 升序取该组合全部净值点。
+fn query_fund_nav(
+    conn: &rusqlite::Connection,
+    portfolio_id: &str,
+) -> Result<Vec<FundNavPoint>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT nav_date, unit_nav, acc_nav, adjusted_nav, daily_return
+             FROM fund_nav_history
+             WHERE portfolio_id = ?1
+             ORDER BY nav_date ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(rusqlite::params![portfolio_id], |row| {
+            Ok(FundNavPoint {
+                nav_date: row.get(0)?,
+                unit_nav: row.get(1)?,
+                acc_nav: row.get(2)?,
+                adjusted_nav: row.get(3)?,
+                daily_return: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
 }
 
 fn query_versions(

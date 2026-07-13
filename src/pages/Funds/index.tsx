@@ -22,6 +22,7 @@ import {
 import { usePortfolioStore } from "../../stores/portfolioStore";
 import AddFundModal from "./AddFundModal";
 import PositionDiffView from "./PositionDiffView";
+import DrawdownSignalView, { SIGNAL_META } from "./DrawdownSignalView";
 import type { Portfolio, PortfolioPosition } from "../../types";
 
 const { Title, Text } = Typography;
@@ -75,13 +76,30 @@ const positionColumns = [
 ];
 
 function PortfolioCard({ portfolio }: { portfolio: Portfolio }) {
-  const { positions, refreshingId, refreshPortfolio, deletePortfolio, fetchPositions } =
-    usePortfolioStore();
+  const {
+    positions,
+    drawdowns,
+    refreshingId,
+    refreshPortfolio,
+    deletePortfolio,
+    fetchPositions,
+    fetchFundDrawdown,
+  } = usePortfolioStore();
   const [expanded, setExpanded] = useState(false);
   const [loadingPositions, setLoadingPositions] = useState(false);
 
   const rows = positions[portfolio.id];
   const refreshing = refreshingId === portfolio.id;
+  const analysis = drawdowns[portfolio.id];
+
+  // 卡片挂载时静默取一次回撤信号（纯读库，无网络），有净值则头部显示信号徽章。
+  useEffect(() => {
+    if (analysis) return;
+    fetchFundDrawdown(portfolio.id).catch(() => {
+      /* 尚未抓过净值，忽略；用户进「回撤信号」页可手动刷新 */
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolio.id]);
 
   const handleToggle = async () => {
     const next = !expanded;
@@ -130,6 +148,12 @@ function PortfolioCard({ portfolio }: { portfolio: Portfolio }) {
             </Tag>
           )}
           {portfolio.fund_type && <Tag>{portfolio.fund_type}</Tag>}
+          {analysis && (
+            <Tag color={SIGNAL_META[analysis.signal_state].tag}>
+              {SIGNAL_META[analysis.signal_state].label}
+              （当前回撤 {analysis.current_drawdown.toFixed(1)}%）
+            </Tag>
+          )}
         </Space>
       }
       extra={
@@ -209,6 +233,11 @@ function PortfolioCard({ portfolio }: { portfolio: Portfolio }) {
               key: "diff",
               label: "调仓",
               children: <PositionDiffView portfolioId={portfolio.id} />,
+            },
+            {
+              key: "drawdown",
+              label: "回撤信号",
+              children: <DrawdownSignalView portfolioId={portfolio.id} />,
             },
           ]}
         />

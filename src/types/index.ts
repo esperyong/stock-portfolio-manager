@@ -810,3 +810,50 @@ export interface PositionDiff {
   items: PositionDiffItem[];
 }
 
+// ===== Fund drawdown signal (最大回撤定投信号, mirrors models/portfolio.rs) =====
+
+/** 定投信号档位：正常 / 接近历史大底 / 建议开启定投 */
+export type FundSignalState = "NORMAL" | "APPROACHING" | "BUY_ZONE";
+
+/** 逐日回撤点（复用 performance 的 DrawdownPoint；drawdown 为负百分比） */
+export interface FundDrawdownPoint {
+  date: string;
+  drawdown: number;
+}
+
+/** 某窗口口径下的最大回撤概要（max_drawdown 为负百分比） */
+export interface DrawdownWindow {
+  label: string;
+  max_drawdown: number;
+  peak_date: string;
+  trough_date: string;
+  recovery_date: string | null;
+}
+
+export interface FundDrawdownAnalysis {
+  fund_code: string;
+  fund_type: string | null;
+  start_date: string;
+  latest_date: string;
+  latest_adjusted_nav: number;
+  peak_nav: number;
+  /** 全历史最大回撤 HMDD（负百分比） */
+  max_drawdown: number;
+  peak_date: string;
+  trough_date: string;
+  recovery_date: string | null;
+  /** 当前回撤 CDD（负百分比） */
+  current_drawdown: number;
+  /** 历史最大回撤信号线净值 L = 峰值 × (1 − |HMDD|) */
+  threshold_nav: number;
+  /** 距触线还需下跌的百分比（正=尚需下跌；≤0=已在触线下方） */
+  distance_to_signal_pct: number;
+  signal_state: FundSignalState;
+  /** 接近区系数（默认 0.9） */
+  approaching_ratio: number;
+  windows: DrawdownWindow[];
+  history_too_short: boolean;
+  applicability_note: string | null;
+  drawdown_series: FundDrawdownPoint[];
+}
+
