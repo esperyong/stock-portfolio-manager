@@ -249,6 +249,8 @@ pub fn run() {
             commands::portfolios::get_portfolio_positions,
             commands::portfolios::get_portfolio_versions,
             commands::portfolios::get_portfolio_diff,
+            commands::portfolios::refresh_fund_nav,
+            commands::portfolios::get_fund_drawdown,
             // Stock Splits (for option contract matching)
             commands::stock_splits::get_stock_splits,
             commands::stock_splits::add_stock_split,

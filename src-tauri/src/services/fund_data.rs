@@ -11,7 +11,7 @@
 //! HTML 表结构固定，用正则解析，不引入 HTML 解析依赖；上游改版时解析失败
 //! 返回中文错误，不写脏数据（已落库的历史仓位不受影响）。
 
-use crate::models::FundSearchResult;
+use crate::models::{FundNavPoint, FundSearchResult};
 use crate::services::http_client;
 use regex::Regex;
 use std::sync::OnceLock;
@@ -275,6 +275,115 @@ fn parse_number(s: &str) -> Option<f64> {
     s.trim().replace(',', "").parse().ok()
 }
 
+static NWT_RE: OnceLock<Regex> = OnceLock::new();
+static ACW_RE: OnceLock<Regex> = OnceLock::new();
+
+/// 抓取基金**全量日频净值历史**（复权净值序列），返回按 `nav_date` 升序。
+///
+/// 数据源 `fund.eastmoney.com/pingzhongdata/<code>.js`：一次请求即含全部历史
+/// （`Data_netWorthTrend` 单位净值+日复权收益率+分红标记、`Data_ACWorthTrend` 累计净值）。
+/// 之所以不用 `lsjz` 历史净值接口——其 pageSize 实测封顶 20 行/页，5000+ 行全历史需数百次请求。
+///
+/// 复权净值 `adjusted_nav` 由首点 1.0 起累乘日复权收益率 `equityReturn` 重建，作为回撤计算基准
+/// （单位净值在分红除权日会下跌产生假回撤，故不用作基准）。
+pub async fn fetch_fund_nav_history(fund_code: &str) -> Result<Vec<FundNavPoint>, String> {
+    let url = format!("https://fund.eastmoney.com/pingzhongdata/{}.js", fund_code);
+    let resp = http_client::eastmoney_client()
+        .get(&url)
+        .header(reqwest::header::REFERER, "https://fund.eastmoney.com/")
+        .send()
+        .await
+        .map_err(|e| format!("基金净值请求失败：{}", e))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("基金净值响应读取失败：{}", e))?;
+    parse_pingzhongdata_nav(&body)
+}
+
+/// 东八区零点的 UTC 毫秒时间戳 → 交易日 `YYYY-MM-DD`（+8h 后取 UTC 日期）。
+fn ts_ms_to_date(x_ms: i64) -> Option<String> {
+    let secs = x_ms / 1000 + 8 * 3600;
+    chrono::DateTime::from_timestamp(secs, 0).map(|dt| dt.format("%Y-%m-%d").to_string())
+}
+
+/// 解析 pingzhongdata JS 中的净值序列。纯函数，便于单测。
+/// 从 `Data_netWorthTrend` 取单位净值/日复权收益率，从 `Data_ACWorthTrend` 按时间戳对齐累计净值，
+/// 按日期升序累乘 `equityReturn` 重建复权净值。
+pub fn parse_pingzhongdata_nav(body: &str) -> Result<Vec<FundNavPoint>, String> {
+    let nwt_re = NWT_RE
+        .get_or_init(|| Regex::new(r"(?s)Data_netWorthTrend\s*=\s*(\[.*?\])\s*;").unwrap());
+    let acw_re = ACW_RE
+        .get_or_init(|| Regex::new(r"(?s)Data_ACWorthTrend\s*=\s*(\[.*?\])\s*;").unwrap());
+
+    let nwt_json = nwt_re
+        .captures(body)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str())
+        .ok_or_else(|| "基金净值响应格式异常，接口可能已变更".to_string())?;
+    let nwt: serde_json::Value = serde_json::from_str(nwt_json)
+        .map_err(|_| "基金净值数据解析失败（netWorthTrend）".to_string())?;
+    let nwt_arr = nwt
+        .as_array()
+        .ok_or_else(|| "基金净值数据结构异常".to_string())?;
+
+    // 累计净值：时间戳 -> acc_nav（可缺失，缺失不影响回撤计算）。
+    let mut acc_map: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+    if let Some(caps) = acw_re.captures(body) {
+        if let Ok(acw) = serde_json::from_str::<serde_json::Value>(&caps[1]) {
+            if let Some(arr) = acw.as_array() {
+                for pair in arr {
+                    if let Some(p) = pair.as_array() {
+                        if let (Some(x), Some(v)) = (
+                            p.first().and_then(|v| v.as_i64()),
+                            p.get(1).and_then(|v| v.as_f64()),
+                        ) {
+                            acc_map.insert(x, v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 先收集 (date, ts, unit_nav, daily_return)，升序后再累乘复权净值。
+    let mut rows: Vec<(String, i64, Option<f64>, Option<f64>)> = Vec::with_capacity(nwt_arr.len());
+    for pt in nwt_arr {
+        let x = match pt.get("x").and_then(|v| v.as_i64()) {
+            Some(x) => x,
+            None => continue,
+        };
+        let date = match ts_ms_to_date(x) {
+            Some(d) => d,
+            None => continue,
+        };
+        let unit_nav = pt.get("y").and_then(|v| v.as_f64());
+        let daily_return = pt.get("equityReturn").and_then(|v| v.as_f64());
+        rows.push((date, x, unit_nav, daily_return));
+    }
+    if rows.is_empty() {
+        return Err("该基金暂无可用净值数据".to_string());
+    }
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut out = Vec::with_capacity(rows.len());
+    let mut adj = 1.0f64;
+    for (i, (date, ts, unit_nav, daily_return)) in rows.into_iter().enumerate() {
+        // 首点基准 1.0；其后按当日复权收益率复利递推。
+        if i > 0 {
+            adj *= 1.0 + daily_return.unwrap_or(0.0) / 100.0;
+        }
+        out.push(FundNavPoint {
+            nav_date: date,
+            unit_nav,
+            acc_nav: acc_map.get(&ts).copied(),
+            adjusted_nav: adj,
+            daily_return,
+        });
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,5 +569,58 @@ mod tests {
         assert_eq!(quarter_end_date("2025", "3").as_deref(), Some("2025-09-30"));
         assert_eq!(quarter_end_date("2025", "4").as_deref(), Some("2025-12-31"));
         assert_eq!(quarter_end_date("2025", "5"), None);
+    }
+
+    #[test]
+    fn test_ts_ms_to_date_beijing_midnight() {
+        // 东八区零点的 UTC 毫秒 → 交易日（+8h 取 UTC 日期）。
+        assert_eq!(ts_ms_to_date(1577894400000).as_deref(), Some("2020-01-02"));
+        assert_eq!(ts_ms_to_date(1578240000000).as_deref(), Some("2020-01-06"));
+    }
+
+    /// pingzhongdata 片段：netWorthTrend 故意乱序（验证按日期排序 + 复权累乘），
+    /// ACWorthTrend 按时间戳对齐累计净值。
+    fn pingzhong_fixture() -> &'static str {
+        r#"var Data_netWorthTrend = [
+            {"x":1578240000000,"y":0.8,"equityReturn":-50,"unitMoney":""},
+            {"x":1577894400000,"y":1.5,"equityReturn":0,"unitMoney":""},
+            {"x":1577980800000,"y":1.6,"equityReturn":10,"unitMoney":"分红：每份派现金0.1000元"}
+        ];
+        var Data_ACWorthTrend = [[1577894400000,2.5],[1577980800000,2.6],[1578240000000,1.8]];
+        var Data_grandTotal = [];"#
+    }
+
+    #[test]
+    fn test_parse_pingzhongdata_sorts_and_rebuilds_adjusted_nav() {
+        let out = parse_pingzhongdata_nav(pingzhong_fixture()).unwrap();
+        assert_eq!(out.len(), 3);
+
+        assert_eq!(out[0].nav_date, "2020-01-02");
+        assert!((out[0].adjusted_nav - 1.0).abs() < 1e-9); // 首点基准 1.0
+        assert_eq!(out[0].unit_nav, Some(1.5));
+        assert_eq!(out[0].acc_nav, Some(2.5));
+        assert_eq!(out[0].daily_return, Some(0.0));
+
+        assert_eq!(out[1].nav_date, "2020-01-03");
+        assert!((out[1].adjusted_nav - 1.10).abs() < 1e-9); // 1.0 * (1 + 10%)
+        assert_eq!(out[1].acc_nav, Some(2.6));
+
+        assert_eq!(out[2].nav_date, "2020-01-06");
+        assert!((out[2].adjusted_nav - 0.55).abs() < 1e-9); // 1.10 * (1 - 50%)
+        assert_eq!(out[2].acc_nav, Some(1.8));
+    }
+
+    #[test]
+    fn test_parse_pingzhongdata_missing_acworth_is_tolerated() {
+        let body = r#"var Data_netWorthTrend = [{"x":1577894400000,"y":1.0,"equityReturn":0,"unitMoney":""}];"#;
+        let out = parse_pingzhongdata_nav(body).unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].acc_nav, None); // 无 ACWorthTrend 时累计净值缺失，不报错
+        assert!((out[0].adjusted_nav - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_parse_pingzhongdata_garbage_is_error() {
+        assert!(parse_pingzhongdata_nav("<html>404</html>").is_err());
     }
 }

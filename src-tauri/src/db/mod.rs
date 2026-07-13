@@ -418,6 +418,22 @@ impl Database {
               );
         ");
 
+        // Fund drawdown signal: 基金日频净值历史（复权净值序列），用于计算历史/当前
+        // 最大回撤与定投择时信号。随组合级联删除，与真实资产域零耦合。
+        // adjusted_nav = 由 pingzhongdata 的日复权收益率 equityReturn 累乘重建的复权净值，
+        // 为回撤计算基准（单位净值会因分红除权产生假回撤，故不用作基准）。
+        conn.execute_batch("
+            CREATE TABLE IF NOT EXISTS fund_nav_history (
+                portfolio_id TEXT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+                nav_date TEXT NOT NULL,
+                unit_nav REAL,
+                acc_nav REAL,
+                adjusted_nav REAL,
+                daily_return REAL,
+                PRIMARY KEY (portfolio_id, nav_date)
+            );
+        ")?;
+
         Ok(())
     }
 }

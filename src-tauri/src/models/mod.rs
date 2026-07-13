@@ -22,8 +22,8 @@ pub use category::Category;
 pub use dashboard::{DashboardSummary, HoldingDetail};
 pub use holding::Holding;
 pub use portfolio::{
-    FundSearchResult, Portfolio, PortfolioPosition, PortfolioVersion, PositionDiff,
-    PositionDiffItem,
+    DrawdownWindow, FundDrawdownAnalysis, FundNavPoint, FundSearchResult, Portfolio,
+    PortfolioPosition, PortfolioVersion, PositionDiff, PositionDiffItem,
 };
 pub use quote::{DailyHoldingSnapshot, DailyPortfolioValue, ExchangeRates, HoldingWithQuote, StockQuote};
 pub use statistics::{AccountStatistics, CategoryStatistics, MarketStatistics, PieSlice, PnlItem, StatisticsOverview};
