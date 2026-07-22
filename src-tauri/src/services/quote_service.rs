@@ -403,6 +403,7 @@ pub async fn fetch_us_quote(symbol: &str) -> Result<StockQuote, String> {
 /// Fetch a US stock quote using the specified provider.
 pub async fn fetch_us_quote_with_provider(symbol: &str, provider: &str) -> Result<StockQuote, String> {
     match provider {
+        "tencent" => fetch_tencent_quote(symbol, "US").await,
         "eastmoney" => fetch_with_tencent_fallback(symbol, "US", || fetch_eastmoney_us_quote(symbol)).await,
         "xueqiu" => fetch_xueqiu_us_quote(symbol).await,
         _ => {
@@ -415,6 +416,7 @@ pub async fn fetch_us_quote_with_provider(symbol: &str, provider: &str) -> Resul
 /// Fetch a HK stock quote using the specified provider.
 pub async fn fetch_hk_quote_with_provider(symbol: &str, provider: &str) -> Result<StockQuote, String> {
     match provider {
+        "tencent" => fetch_tencent_quote(symbol, "HK").await,
         "eastmoney" => fetch_with_tencent_fallback(symbol, "HK", || fetch_eastmoney_hk_quote(symbol)).await,
         "xueqiu" => fetch_xueqiu_hk_quote(symbol).await,
         _ => {
@@ -437,6 +439,7 @@ pub async fn fetch_cn_quote(symbol: &str) -> Result<StockQuote, String> {
 /// Fetch a CN A-share stock quote using the specified provider.
 pub async fn fetch_cn_quote_with_provider(symbol: &str, provider: &str) -> Result<StockQuote, String> {
     match provider {
+        "tencent" => fetch_tencent_quote(symbol, "CN").await,
         "xueqiu" => fetch_xueqiu_cn_quote(symbol).await,
         // Default to eastmoney for CN, with Tencent fallback when East Money is unreachable.
         _ => fetch_with_tencent_fallback(symbol, "CN", || fetch_eastmoney_cn_quote(symbol)).await,
@@ -1631,6 +1634,77 @@ pub async fn fetch_stock_history_eastmoney(
     Ok(result)
 }
 
+/// Fetch historical daily closing prices for a stock from Tencent (腾讯).
+/// Uses the `web.ifzq.gtimg.cn` fqkline endpoint.  CN A-shares return
+/// adjusted data under the `qfqday` key; HK/US return unadjusted data under
+/// `day`.  Each row is `[date, open, close, high, low, volume, …]`.
+/// Returns a list of (date, close_price) pairs sorted by date ascending.
+pub async fn fetch_stock_history_tencent(
+    symbol: &str,
+    market: &str,
+    start_date: chrono::NaiveDate,
+    end_date: chrono::NaiveDate,
+) -> Result<Vec<(chrono::NaiveDate, f64)>, String> {
+    let tencent_symbol = to_tencent_symbol(symbol, market)?;
+    let beg = start_date.format("%Y-%m-%d").to_string();
+    let end = end_date.format("%Y-%m-%d").to_string();
+    // A large `count` (negative = backwards from `end`) asks for all available
+    // rows in the range; we then filter by date on the client side.
+    let url = format!(
+        "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,{beg},{end},640,qfq",
+        symbol = tencent_symbol,
+        beg = beg,
+        end = end,
+    );
+
+    let resp = http_client::tencent_client()
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("fetch_stock_history_tencent: network error for {}: {}", tencent_symbol, e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!(
+            "fetch_stock_history_tencent: HTTP {} for {}",
+            resp.status(),
+            tencent_symbol
+        ));
+    }
+
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("fetch_stock_history_tencent: parse error for {}: {}", tencent_symbol, e))?;
+
+    // data.{symbol}.qfqday (CN) or data.{symbol}.day (HK/US); each is an array
+    // of rows.  CN rows: [date, open, close, high, low, volume]; HK/US rows
+    // may carry an extra object element at the end.
+    let rows = json["data"][&tencent_symbol]["qfqday"]
+        .as_array()
+        .or_else(|| json["data"][&tencent_symbol]["day"].as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut result: Vec<(chrono::NaiveDate, f64)> = Vec::new();
+    for row in &rows {
+        if let Some(arr) = row.as_array() {
+            // date at index 0 (string "YYYY-MM-DD"), close at index 2.
+            let date_str = arr.first().and_then(|v| v.as_str()).unwrap_or("");
+            let close = arr.get(2).and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok());
+            if let (Ok(date), Some(close_price)) = (
+                chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d"),
+                close,
+            ) {
+                if date >= start_date && date <= end_date {
+                    result.push((date, close_price));
+                }
+            }
+        }
+    }
+    result.sort_by_key(|(d, _)| *d);
+    Ok(result)
+}
+
 /// Fetch historical daily closing prices for a stock from Xueqiu (雪球).
 /// Uses the Xueqiu kline API (`/v5/stock/chart/kline.json`).
 /// Returns a list of (date, close_price) pairs sorted by date ascending.
@@ -1789,6 +1863,25 @@ pub async fn fetch_stock_history(
     provider: &str,
 ) -> Result<Vec<(chrono::NaiveDate, f64)>, String> {
     match provider {
+        "tencent" => {
+            match fetch_stock_history_tencent(symbol, market, start_date, end_date).await {
+                Ok(prices) if !prices.is_empty() => Ok(prices),
+                Ok(_empty) => {
+                    eprintln!(
+                        "fetch_stock_history: Tencent returned empty history for {} ({}), falling back to yahoo",
+                        symbol, market
+                    );
+                    fetch_stock_history_yahoo(symbol, market, start_date, end_date).await
+                }
+                Err(e) => {
+                    eprintln!(
+                        "fetch_stock_history: Tencent history failed for {} ({}): {}, falling back to yahoo",
+                        symbol, market, e
+                    );
+                    fetch_stock_history_yahoo(symbol, market, start_date, end_date).await
+                }
+            }
+        }
         "xueqiu" => {
             match fetch_stock_history_xueqiu(symbol, market, start_date, end_date).await {
                 Ok(prices) if !prices.is_empty() => Ok(prices),

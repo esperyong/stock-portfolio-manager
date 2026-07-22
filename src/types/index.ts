@@ -631,7 +631,7 @@ export interface AiConfig {
 }
 
 // Quote Provider Config
-export type QuoteProvider = "yahoo" | "eastmoney" | "xueqiu";
+export type QuoteProvider = "tencent" | "yahoo" | "eastmoney" | "xueqiu";
 
 export interface QuoteProviderConfig {
   us_provider: QuoteProvider;

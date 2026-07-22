@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 /// - `"xueqiu"`    – Xueqiu (雪球), supports CN / HK / US
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuoteProviderConfig {
-    /// Provider for US stocks: "eastmoney" (default)
+    /// Provider for US stocks: "tencent" (default)
     pub us_provider: String,
-    /// Provider for HK stocks: "eastmoney" (default)
+    /// Provider for HK stocks: "tencent" (default)
     pub hk_provider: String,
-    /// Provider for CN A-shares: "eastmoney" (default)
+    /// Provider for CN A-shares: "tencent" (default)
     pub cn_provider: String,
     /// Optional user-provided Xueqiu cookie string (e.g. `xq_a_token=xxx`).
     /// When set, this replaces the auto-obtained `xq_a_token` in API requests.
@@ -42,9 +42,9 @@ fn default_cn_adjust() -> bool { true }
 impl Default for QuoteProviderConfig {
     fn default() -> Self {
         QuoteProviderConfig {
-            us_provider: "eastmoney".to_string(),
-            hk_provider: "eastmoney".to_string(),
-            cn_provider: "eastmoney".to_string(),
+            us_provider: "tencent".to_string(),
+            hk_provider: "tencent".to_string(),
+            cn_provider: "tencent".to_string(),
             xueqiu_cookie: None,
             xueqiu_u: None,
             cn_adjust_sell_pay_cost: true,

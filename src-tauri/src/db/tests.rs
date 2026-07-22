@@ -191,9 +191,9 @@ mod tests {
     fn test_quote_provider_config_default() {
         let db = create_test_db();
         let config = crate::services::quote_provider_service::get_quote_provider_config(&db).unwrap();
-        assert_eq!(config.us_provider, "eastmoney");
-        assert_eq!(config.hk_provider, "eastmoney");
-        assert_eq!(config.cn_provider, "eastmoney");
+        assert_eq!(config.us_provider, "tencent");
+        assert_eq!(config.hk_provider, "tencent");
+        assert_eq!(config.cn_provider, "tencent");
     }
 
     #[test]
