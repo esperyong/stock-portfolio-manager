@@ -17,14 +17,16 @@ const INTERVAL_OPTIONS = [
 ];
 
 const PROVIDER_OPTIONS_US_HK = [
+  { value: "tencent", label: "腾讯行情（默认）" },
   { value: "yahoo", label: "Yahoo Finance" },
   { value: "eastmoney", label: "东方财富" },
-  { value: "xueqiu", label: "雪球（默认）" },
+  { value: "xueqiu", label: "雪球" },
 ];
 
 const PROVIDER_OPTIONS_CN = [
+  { value: "tencent", label: "腾讯行情（默认）" },
   { value: "eastmoney", label: "东方财富" },
-  { value: "xueqiu", label: "雪球（默认）" },
+  { value: "xueqiu", label: "雪球" },
 ];
 
 const COLOR_SCHEME_OPTIONS: { value: ColorScheme; label: string }[] = [
@@ -36,9 +38,9 @@ export default function GeneralSettings() {
   const { refreshIntervalMs, setRefreshInterval } = useQuoteStore();
   const { colorScheme, setColorScheme } = useSettingsStore();
   const [providerConfig, setProviderConfig] = useState<QuoteProviderConfig>({
-    us_provider: "xueqiu",
-    hk_provider: "xueqiu",
-    cn_provider: "xueqiu",
+    us_provider: "tencent",
+    hk_provider: "tencent",
+    cn_provider: "tencent",
     xueqiu_cookie: null,
     xueqiu_u: null,
     cn_adjust_sell_pay_cost: true,
@@ -183,7 +185,7 @@ export default function GeneralSettings() {
           </Form.Item>
         </Form>
         <Paragraph type="secondary">
-          各市场的行情数据来源：A股支持东方财富和雪球，港股和美股支持 Yahoo Finance、东方财富和雪球。修改后将在下次刷新时生效。
+          各市场的行情数据来源：默认使用腾讯行情（免认证、三市场通用）。A股还支持东方财富和雪球，港股和美股还支持 Yahoo Finance、东方财富和雪球。修改后将在下次刷新时生效。
         </Paragraph>
       </Card>
 

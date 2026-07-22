@@ -228,9 +228,9 @@ impl Database {
         conn.execute_batch("
             CREATE TABLE IF NOT EXISTS quote_provider_config (
                 id INTEGER PRIMARY KEY DEFAULT 1,
-                us_provider TEXT NOT NULL DEFAULT 'xueqiu',
-                hk_provider TEXT NOT NULL DEFAULT 'xueqiu',
-                cn_provider TEXT NOT NULL DEFAULT 'xueqiu',
+                us_provider TEXT NOT NULL DEFAULT 'tencent',
+                hk_provider TEXT NOT NULL DEFAULT 'tencent',
+                cn_provider TEXT NOT NULL DEFAULT 'tencent',
                 updated_at TEXT NOT NULL DEFAULT ''
             );
         ")?;

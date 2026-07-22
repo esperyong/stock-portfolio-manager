@@ -3530,6 +3530,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "csv",
+ "encoding_rs",
  "image",
  "objc2-app-kit",
  "objc2-foundation",

@@ -36,16 +36,16 @@ pub fn update_quote_provider_config(
 ) -> Result<bool, String> {
     // Validate provider values
     match config.us_provider.as_str() {
-        "yahoo" | "eastmoney" | "xueqiu" => {}
+        "tencent" | "yahoo" | "eastmoney" | "xueqiu" => {}
         _ => return Err(format!("Invalid US provider: {}", config.us_provider)),
     }
     match config.hk_provider.as_str() {
-        "yahoo" | "eastmoney" | "xueqiu" => {}
+        "tencent" | "yahoo" | "eastmoney" | "xueqiu" => {}
         _ => return Err(format!("Invalid HK provider: {}", config.hk_provider)),
     }
     match config.cn_provider.as_str() {
-        "eastmoney" | "xueqiu" => {}
-        _ => return Err(format!("Invalid CN provider ({}). Only 'eastmoney' and 'xueqiu' are supported.", config.cn_provider)),
+        "tencent" | "eastmoney" | "xueqiu" => {}
+        _ => return Err(format!("Invalid CN provider ({}). Only 'tencent', 'eastmoney' and 'xueqiu' are supported.", config.cn_provider)),
     }
 
     let conn = db.conn.lock().unwrap();
