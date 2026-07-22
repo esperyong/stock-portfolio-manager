@@ -434,6 +434,19 @@ impl Database {
             );
         ")?;
 
+        // Migration: add dividend_yield column to cached_quotes. Sourced from
+        // Xueqiu's batch quote endpoint independently of the configured quote
+        // provider. NULL when never fetched or the stock pays no dividend.
+        let _ = conn.execute_batch(
+            "ALTER TABLE cached_quotes ADD COLUMN dividend_yield REAL;",
+        );
+
+        // Migration: add pe_ttm column to cached_quotes. Same side channel as
+        // dividend_yield. NULL when never fetched or unavailable.
+        let _ = conn.execute_batch(
+            "ALTER TABLE cached_quotes ADD COLUMN pe_ttm REAL;",
+        );
+
         Ok(())
     }
 }

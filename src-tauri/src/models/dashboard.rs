@@ -36,4 +36,10 @@ pub struct HoldingDetail {
     pub currency: String,
     /// Market value normalised to USD for cross-currency comparison/sorting.
     pub market_value_usd: f64,
+    /// Trailing-12-month dividend yield as a percentage (e.g. 1.74 = 1.74%).
+    /// `None` when never fetched or the stock pays no dividend.
+    pub dividend_yield: Option<f64>,
+    /// Trailing-twelve-month P/E ratio.  Negative for loss-making companies.
+    /// `None` when never fetched or unavailable.
+    pub pe_ttm: Option<f64>,
 }

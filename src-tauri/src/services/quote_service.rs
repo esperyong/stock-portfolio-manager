@@ -64,6 +64,8 @@ pub fn make_cash_quote(symbol: &str, market: &str) -> StockQuote {
         low: 1.0,
         volume: 0,
         updated_at: Utc::now().to_rfc3339(),
+        dividend_yield: None,
+        pe_ttm: None,
     }
 }
 
@@ -124,6 +126,21 @@ impl QuoteCache {
         }
     }
 
+    /// Update the valuation metrics (`dividend_yield`, `pe_ttm`) of an
+    /// already-cached quote in place, only for fields that are `Some`.
+    /// Symbols not present in the cache are ignored.
+    pub fn set_valuation(&self, symbol: &str, metrics: &ValuationMetrics) {
+        let mut lock = self.inner.lock().unwrap();
+        if let Some(entry) = lock.get_mut(symbol) {
+            if let Some(y) = metrics.dividend_yield {
+                entry.quote.dividend_yield = Some(y);
+            }
+            if let Some(pe) = metrics.pe_ttm {
+                entry.quote.pe_ttm = Some(pe);
+            }
+        }
+    }
+
     /// Returns all cached quotes for the given symbols, plus the list of
     /// symbols that are missing from the cache.
     pub fn get_batch(&self, symbols: &[(String, String)]) -> (Vec<StockQuote>, Vec<(String, String)>) {
@@ -147,7 +164,8 @@ pub fn load_quotes_from_db(db: &Database) -> Result<Vec<StockQuote>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT symbol, name, market, current_price, previous_close,
-                    change, change_percent, high, low, volume, updated_at
+                    change, change_percent, high, low, volume, updated_at,
+                    dividend_yield, pe_ttm
              FROM cached_quotes",
         )
         .map_err(|e| e.to_string())?;
@@ -165,6 +183,8 @@ pub fn load_quotes_from_db(db: &Database) -> Result<Vec<StockQuote>, String> {
                 low: row.get(8)?,
                 volume: row.get(9)?,
                 updated_at: row.get(10)?,
+                dividend_yield: row.get(11)?,
+                pe_ttm: row.get(12)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -173,14 +193,33 @@ pub fn load_quotes_from_db(db: &Database) -> Result<Vec<StockQuote>, String> {
 }
 
 /// Persist quotes to the database (upsert).
+///
+/// Uses `ON CONFLICT(symbol) DO UPDATE` (not `REPLACE`) so that the
+/// `dividend_yield` column is left untouched on existing rows.  `REPLACE`
+/// would delete-and-reinsert, NULLing out `dividend_yield` for any symbol
+/// whose latest fetch did not return one.  Fresh yields are written
+/// separately via [`update_dividend_yields_in_db`], which only touches
+/// symbols with a new value — together this preserves the last cached yield
+/// across refreshes.
 pub fn save_quotes_to_db(db: &Database, quotes: &[StockQuote]) -> Result<(), String> {
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare(
-            "INSERT OR REPLACE INTO cached_quotes
+            "INSERT INTO cached_quotes
                 (symbol, name, market, current_price, previous_close,
                  change, change_percent, high, low, volume, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+             ON CONFLICT(symbol) DO UPDATE SET
+                name = excluded.name,
+                market = excluded.market,
+                current_price = excluded.current_price,
+                previous_close = excluded.previous_close,
+                change = excluded.change,
+                change_percent = excluded.change_percent,
+                high = excluded.high,
+                low = excluded.low,
+                volume = excluded.volume,
+                updated_at = excluded.updated_at",
         )
         .map_err(|e| e.to_string())?;
     for q in quotes {
@@ -198,6 +237,38 @@ pub fn save_quotes_to_db(db: &Database, quotes: &[StockQuote]) -> Result<(), Str
             q.updated_at,
         ])
         .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Update only the `dividend_yield` column for the given symbols, skipping any
+/// symbol not present in `metrics`.  This preserves the last cached value for
+/// symbols whose latest Xueqiu batch did not return a given field.
+pub fn update_valuation_metrics_in_db(
+    db: &Database,
+    metrics: &std::collections::HashMap<String, ValuationMetrics>,
+) -> Result<(), String> {
+    if metrics.is_empty() {
+        return Ok(());
+    }
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+    for (symbol, m) in metrics {
+        // Update each field independently so a missing value in the latest
+        // batch does not clobber the previously cached one.
+        if let Some(y) = m.dividend_yield {
+            conn.execute(
+                "UPDATE cached_quotes SET dividend_yield = ?1 WHERE symbol = ?2",
+                rusqlite::params![y, symbol],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        if let Some(pe) = m.pe_ttm {
+            conn.execute(
+                "UPDATE cached_quotes SET pe_ttm = ?1 WHERE symbol = ?2",
+                rusqlite::params![pe, symbol],
+            )
+            .map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }
@@ -391,6 +462,8 @@ pub async fn fetch_yahoo_quote(symbol: &str, market: &str) -> Result<StockQuote,
         low: meta.regular_market_day_low.unwrap_or(0.0),
         volume,
         updated_at: Utc::now().to_rfc3339(),
+        dividend_yield: None,
+        pe_ttm: None,
     })
 }
 
@@ -600,6 +673,8 @@ fn parse_tencent_quote(symbol: &str, market: &str, text: &str) -> Result<StockQu
         low,
         volume,
         updated_at: Utc::now().to_rfc3339(),
+        dividend_yield: None,
+        pe_ttm: None,
     })
 }
 
@@ -875,6 +950,8 @@ fn parse_eastmoney_quote(symbol: &str, market: &str, resp: EastMoneyResponse) ->
         low,
         volume,
         updated_at: Utc::now().to_rfc3339(),
+        dividend_yield: None,
+        pe_ttm: None,
     })
 }
 
@@ -934,6 +1011,22 @@ pub fn take_quote_warning() -> Option<String> {
 /// available for the fallback `take_quote_warning` invocation from the frontend.
 pub fn peek_quote_warning() -> Option<String> {
     LAST_QUOTE_WARNING.lock().unwrap().clone()
+}
+
+/// Hint shown when the dividend-yield side channel cannot authenticate
+/// against Xueqiu.  Distinct from the main quote cookie hint so the user
+/// understands this only affects the 股息率TTM column, not the main quotes.
+const DIVIDEND_YIELD_COOKIE_HINT: &str =
+    "股息率需要雪球登录 Cookie：请到设置页面填入雪球 Cookie (xq_a_token) 与 u 值，否则股息率TTM 列将无数据。";
+
+/// Surface the dividend-yield cookie hint as a quote-warning, but only when
+/// no more important warning is already set (so a main-quote failure is not
+/// masked by the dividend side channel).
+fn set_dividend_yield_cookie_warning() {
+    let mut w = LAST_QUOTE_WARNING.lock().unwrap();
+    if w.is_none() {
+        *w = Some(DIVIDEND_YIELD_COOKIE_HINT.to_string());
+    }
 }
 
 /// Set (or clear) the user-provided Xueqiu cookie string.
@@ -1178,6 +1271,11 @@ struct XueqiuQuote {
     low: Option<f64>,
     /// Volume
     volume: Option<f64>,
+    /// Trailing-12-month dividend yield as a decimal ratio (e.g. 0.12 = 12%).
+    /// Absent for non-dividend-paying stocks.
+    dividend_yield: Option<f64>,
+    /// Trailing-twelve-month P/E ratio.  Negative for loss-making companies.
+    pe_ttm: Option<f64>,
 }
 
 /// Xueqiu kline (historical candlestick) API response wrapper.
@@ -1247,6 +1345,8 @@ fn parse_xueqiu_quote(symbol: &str, market: &str, resp: XueqiuResponse) -> Resul
     let high = quote.high.unwrap_or(0.0);
     let low = quote.low.unwrap_or(0.0);
     let volume = quote.volume.unwrap_or(0.0) as u64;
+    let dividend_yield = quote.dividend_yield;
+    let pe_ttm = quote.pe_ttm;
 
     Ok(StockQuote {
         symbol: symbol.to_string(),
@@ -1260,6 +1360,8 @@ fn parse_xueqiu_quote(symbol: &str, market: &str, resp: XueqiuResponse) -> Resul
         low,
         volume,
         updated_at: Utc::now().to_rfc3339(),
+        dividend_yield,
+        pe_ttm,
     })
 }
 
@@ -1402,6 +1504,285 @@ async fn fetch_xueqiu_hk_quote(symbol: &str) -> Result<StockQuote, String> {
 
     let resp = parse_xueqiu_body(&body, symbol)?;
     parse_xueqiu_quote(symbol, "HK", resp)
+}
+
+/// Valuation metrics fetched from Xueqiu's batch quote endpoint as a side
+/// channel, independent of the configured quote provider.  Each field is
+/// `None` when Xueqiu did not return it for a given symbol.
+#[derive(Debug, Clone, Default)]
+pub struct ValuationMetrics {
+    /// TTM dividend yield as a percentage (e.g. 1.74 = 1.74%).
+    pub dividend_yield: Option<f64>,
+    /// Trailing-twelve-month P/E ratio.  Negative for loss-making companies.
+    pub pe_ttm: Option<f64>,
+}
+
+/// Inner `quote` object of a Xueqiu **batch** quote response item.  Only the
+/// fields we need for the valuation side channel are captured; the rest
+/// are ignored by serde.  This mirrors [`XueqiuQuote`] but is kept separate
+/// because the batch response nests each quote under `data.items[].quote`
+/// rather than `data.quote`.
+#[derive(Debug, Deserialize)]
+struct XueqiuBatchQuote {
+    /// Xueqiu-format symbol, e.g. "SH600519", "AAPL", "00700".
+    symbol: Option<String>,
+    dividend_yield: Option<f64>,
+    pe_ttm: Option<f64>,
+}
+
+/// A wrapper that may itself carry a nested `quote` (Xueqiu's `batch/quote`
+/// endpoint sometimes nests the quote under `market.quote`).
+#[derive(Debug, Deserialize)]
+struct XueqiuBatchMarket {
+    quote: Option<XueqiuBatchQuote>,
+}
+
+/// A single item in a Xueqiu batch quote response.  The quote may appear
+/// directly as `item.quote` or nested as `item.market.quote` depending on the
+/// endpoint variant, so both are captured.
+#[derive(Debug, Deserialize)]
+struct XueqiuBatchItem {
+    quote: Option<XueqiuBatchQuote>,
+    market: Option<XueqiuBatchMarket>,
+}
+
+impl XueqiuBatchItem {
+    fn quote(&self) -> Option<&XueqiuBatchQuote> {
+        self.quote.as_ref().or_else(|| self.market.as_ref().and_then(|m| m.quote.as_ref()))
+    }
+}
+
+/// Xueqiu batch quote response wrapper.  Shape:
+/// `{ data: { items: [ { quote: {...} }, ... ] } }`
+#[derive(Debug, Deserialize)]
+struct XueqiuBatchResponse {
+    data: Option<XueqiuBatchData>,
+    error_code: Option<i32>,
+    error_description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct XueqiuBatchData {
+    items: Option<Vec<XueqiuBatchItem>>,
+}
+
+/// Batch-fetch trailing-12-month dividend yields from Xueqiu, independent of
+/// the configured quote provider (which may be Tencent/Eastmoney/Yahoo and
+/// thus not return a yield at all).
+///
+/// Returns a map of **original** holding symbol → yield (decimal ratio).
+/// Symbols that fail to convert to Xueqiu format, or that Xueqiu returns no
+/// `dividend_yield` for (non-dividend-paying stocks), are simply absent from
+/// the map — the caller preserves any previously cached yield for them.
+///
+/// Requests are chunked to keep URL length bounded.  A wholesale HTTP/parse
+/// failure returns `Err` so the caller can skip overwriting the cache.
+pub async fn fetch_xueqiu_valuation_batch(
+    symbols: &[(String, String)],
+) -> Result<std::collections::HashMap<String, ValuationMetrics>, String> {
+    if symbols.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    // Build (original_symbol -> xueqiu_symbol) pairs, skipping un-convertible
+    // symbols.  Also keep a reverse lookup so we can map the Xueqiu symbol
+    // returned in the response back to the original holding symbol.
+    let mut pairs: Vec<(String, String)> = Vec::with_capacity(symbols.len());
+    let mut reverse = std::collections::HashMap::<String, String>::new();
+    // Track how many symbols were skipped per market, for diagnostics.
+    let mut skipped_cn = 0usize;
+    let mut skipped_hk = 0usize;
+    let mut skipped_other = 0usize;
+    for (symbol, market) in symbols {
+        if is_cash_symbol(symbol) {
+            continue;
+        }
+        let xq = match market.as_str() {
+            "CN" => {
+                // CN holdings may be stored as a bare code (e.g. "600519") without
+                // the sh/sz prefix that to_xueqiu_cn_symbol requires.  Normalise
+                // first, exactly as the single-quote path does.
+                let normalized = normalize_cn_symbol(symbol);
+                match to_xueqiu_cn_symbol(&normalized) {
+                    Ok(s) => s,
+                    Err(_) => {
+                        skipped_cn += 1;
+                        eprintln!(
+                            "Xueqiu dividend-yield: skipped CN symbol '{}' (un-convertible)",
+                            symbol
+                        );
+                        continue;
+                    }
+                }
+            }
+            "US" => to_xueqiu_us_symbol(symbol),
+            "HK" => match to_xueqiu_hk_symbol(symbol) {
+                Ok(s) => s,
+                Err(_) => {
+                    skipped_hk += 1;
+                    eprintln!(
+                        "Xueqiu dividend-yield: skipped HK symbol '{}' (un-convertible)",
+                        symbol
+                    );
+                    continue;
+                }
+            },
+            other => {
+                skipped_other += 1;
+                eprintln!(
+                    "Xueqiu dividend-yield: skipped symbol '{}' with unknown market '{}'",
+                    symbol, other
+                );
+                continue;
+            }
+        };
+        reverse.insert(xq.clone(), symbol.clone());
+        pairs.push((symbol.clone(), xq));
+    }
+    if skipped_cn + skipped_hk + skipped_other > 0 {
+        eprintln!(
+            "Xueqiu dividend-yield: skipped {} CN / {} HK / {} other symbols",
+            skipped_cn, skipped_hk, skipped_other
+        );
+    }
+    if pairs.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    // Diagnostic: confirm whether a user-provided Xueqiu cookie / u value is
+    // in effect for this batch, and what symbols (by market) are being queried.
+    {
+        let uc = get_xueqiu_user_cookie();
+        let u = get_xueqiu_user_u();
+        let xq_list = pairs
+            .iter()
+            .map(|(_, xq)| xq.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        eprintln!(
+            "Xueqiu dividend-yield batch: {} symbols [{}], user_cookie={}, u={}",
+            pairs.len(),
+            xq_list,
+            uc.as_ref().map(|c| {
+                let len = c.len();
+                let head: String = c.chars().take(8).collect();
+                format!("Some(len={}, head={}...)", len, head)
+            }).unwrap_or_else(|| "None".to_string()),
+            u.as_ref().map(|_| "Some").unwrap_or_else(|| "None")
+        );
+    }
+
+    let chunk_size = 50;
+    let mut result: std::collections::HashMap<String, ValuationMetrics> = std::collections::HashMap::new();
+
+    for chunk in pairs.chunks(chunk_size) {
+        let joined = chunk
+            .iter()
+            .map(|(_, xq)| xq.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        let url = format!(
+            "https://stock.xueqiu.com/v5/stock/batch/quote.json?symbol={}&extend=detail",
+            joined
+        );
+
+        // Use the first original symbol in the chunk purely for error messages.
+        let label = chunk[0].0.as_str();
+        let response = match send_xueqiu_request(&url, label).await {
+            Ok(r) => r,
+            Err(e) => {
+                // Transient failure for this chunk: surface as a soft warning
+                // but do not abort the whole batch — other chunks may succeed.
+                eprintln!("Xueqiu dividend-yield batch failed for chunk starting {}: {}", label, e);
+                continue;
+            }
+        };
+        if !response.status().is_success() {
+            let status = response.status();
+            let body_preview = response
+                .text()
+                .await
+                .unwrap_or_default()
+                .chars()
+                .take(XUEQIU_RESPONSE_PREVIEW_LEN)
+                .collect::<String>();
+            eprintln!(
+                "Xueqiu dividend-yield batch HTTP {} for chunk starting {}. Body: {}",
+                status, label, body_preview
+            );
+            // 400016 = Xueqiu session/cookie problem.  Surface it as a
+            // quote-warning so the user knows to configure a Xueqiu cookie
+            // in Settings (the quote.json endpoint rejects anonymous tokens).
+            if body_preview.contains("400016") || body_preview.contains("重新登录帐号") {
+                set_dividend_yield_cookie_warning();
+            }
+            continue;
+        }
+        let body = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read Xueqiu batch body for {}: {}", label, e))?;
+        let parsed: XueqiuBatchResponse = serde_json::from_str(&body).map_err(|e| {
+            let preview: String = body.chars().take(XUEQIU_RESPONSE_PREVIEW_LEN).collect();
+            format!(
+                "Failed to parse Xueqiu batch response for {}: {}. Preview: {}",
+                label, e, preview
+            )
+        })?;
+
+        if let Some(err_code) = parsed.error_code {
+            if err_code != 0 {
+                let desc = parsed.error_description.unwrap_or_default();
+                eprintln!(
+                    "Xueqiu batch error for chunk starting {}: code={}, desc={}",
+                    label, err_code, desc
+                );
+                if err_code == 400016 || desc.contains("重新登录帐号") {
+                    set_dividend_yield_cookie_warning();
+                }
+                continue;
+            }
+        }
+        let items = parsed
+            .data
+            .and_then(|d| d.items)
+            .unwrap_or_default();
+        let item_count = items.len();
+        let mut with_metrics = 0usize;
+        for item in items {
+            if let Some(q) = item.quote() {
+                if let Some(xq_symbol) = q.symbol.as_ref() {
+                    if let Some(orig) = reverse.get(xq_symbol) {
+                        let metrics = ValuationMetrics {
+                            dividend_yield: q.dividend_yield,
+                            pe_ttm: q.pe_ttm,
+                        };
+                        if metrics.dividend_yield.is_some() || metrics.pe_ttm.is_some() {
+                            with_metrics += 1;
+                        }
+                        result.insert(orig.clone(), metrics);
+                    } else {
+                        // Symbol in the response didn't match any requested
+                        // symbol — log so we can adjust the reverse mapping if
+                        // Xueqiu returns a different format (e.g. HK03690 vs 03690).
+                        eprintln!(
+                            "Xueqiu batch: unmatched response symbol '{}' (no reverse entry). Requested: [{}]",
+                            xq_symbol,
+                            reverse.keys().cloned().collect::<Vec<_>>().join(",")
+                        );
+                    }
+                }
+                // A response item without dividend_yield/pe_ttm is normal — it
+                // means the stock pays no dividend or has no earnings. No log.
+            }
+        }
+        eprintln!(
+            "Xueqiu valuation batch chunk starting {}: {} of {} response items had metrics",
+            label, with_metrics, item_count
+        );
+    }
+
+    Ok(result)
 }
 
 /// Batch fetch quotes using the specified providers for US, HK and CN markets.
@@ -2462,6 +2843,8 @@ mod tests {
             low: 94.0,
             volume: 1000000,
             updated_at: Utc::now().to_rfc3339(),
+            dividend_yield: None,
+            pe_ttm: None,
         }
     }
 
@@ -2946,6 +3329,8 @@ mod tests {
                     high: Some(high),
                     low: Some(low),
                     volume: Some(volume),
+                    dividend_yield: None,
+                    pe_ttm: None,
                 }),
             }),
             error_code: Some(0),
@@ -3060,6 +3445,8 @@ mod tests {
                     high: Some(1720.00),
                     low: Some(1685.00),
                     volume: Some(12345.0),
+                    dividend_yield: None,
+                    pe_ttm: None,
                 }),
             }),
             error_code: Some(0),
@@ -3095,6 +3482,8 @@ mod tests {
                     high: Some(1200.00),
                     low: Some(950.00),
                     volume: Some(99999.0),
+                    dividend_yield: None,
+                    pe_ttm: None,
                 }),
             }),
             error_code: Some(0),
@@ -3184,6 +3573,35 @@ mod tests {
         assert_eq!(quote.name.unwrap(), "贵州茅台");
         assert!((quote.current.unwrap() - 1725.01).abs() < 0.001);
         assert!((quote.volume.unwrap() - 2558913.0).abs() < 0.001);
+        // dividend_yield should be captured (not silently dropped).
+        assert!((quote.dividend_yield.unwrap() - 0.12).abs() < 0.0001);
+        // pe_ttm should be captured too.
+        assert!((quote.pe_ttm.unwrap() - 27.5).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_parse_xueqiu_batch_dividend_yields() {
+        // Xueqiu batch quote response nests each quote under data.items[].quote.
+        let json = r#"{
+            "data": {
+                "items": [
+                    { "quote": { "symbol": "SH600519", "dividend_yield": 0.025, "pe_ttm": 27.5 } },
+                    { "quote": { "symbol": "SZ000858", "dividend_yield": 0.041 } },
+                    { "quote": { "symbol": "00700" } }
+                ]
+            },
+            "error_code": 0,
+            "error_description": ""
+        }"#;
+        let parsed: XueqiuBatchResponse = serde_json::from_str(json).expect("should parse");
+        let items = parsed.data.unwrap().items.unwrap();
+        assert_eq!(items.len(), 3);
+        // Item with a yield, item with a yield, item without.
+        assert!((items[0].quote.as_ref().unwrap().dividend_yield.unwrap() - 0.025).abs() < 0.0001);
+        assert!((items[0].quote.as_ref().unwrap().pe_ttm.unwrap() - 27.5).abs() < 0.0001);
+        assert!((items[1].quote.as_ref().unwrap().dividend_yield.unwrap() - 0.041).abs() < 0.0001);
+        assert!(items[1].quote.as_ref().unwrap().pe_ttm.is_none());
+        assert!(items[2].quote.as_ref().unwrap().dividend_yield.is_none());
     }
 
     #[test]

@@ -101,15 +101,16 @@ async fn build_holding_details(
         let config = quote_provider_service::get_quote_provider_config(db)?;
         fetch_quotes_batch_cached_with_providers(quote_cache, symbols, &config.us_provider, &config.hk_provider, &config.cn_provider, false).await?
     };
-    let quote_map: std::collections::HashMap<String, (f64, f64)> = quotes
+    let quote_map: std::collections::HashMap<String, (f64, f64, Option<f64>, Option<f64>)> = quotes
         .into_iter()
-        .map(|q| (q.symbol.clone(), (q.current_price, q.change)))
+        .map(|q| (q.symbol.clone(), (q.current_price, q.change, q.dividend_yield, q.pe_ttm)))
         .collect();
 
     let details = rows
         .into_iter()
         .map(|r| {
-            let (current_price, change) = *quote_map.get(&r.symbol).unwrap_or(&(0.0, 0.0));
+            let (current_price, change, dividend_yield, pe_ttm) =
+                *quote_map.get(&r.symbol).unwrap_or(&(0.0, 0.0, None, None));
             let market_value = r.shares * current_price;
             let cost_value = r.shares * r.avg_cost;
             let pnl = market_value - cost_value;
@@ -140,6 +141,8 @@ async fn build_holding_details(
                 // Default to native market value; callers that have exchange
                 // rates (e.g. get_statistics_by_category) will overwrite this.
                 market_value_usd: market_value,
+                dividend_yield,
+                pe_ttm,
             }
         })
         .collect();

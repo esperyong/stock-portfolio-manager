@@ -84,7 +84,7 @@ export default function DashboardPage() {
       <SummaryCards summary={summary} loading={loadingSummary} error={errorSummary} />
 
       {/* Quick market distribution chart */}
-      <QuickCharts summary={summary} />
+      <QuickCharts summary={summary} holdings={holdingDetails} />
 
       {/* Exchange Rates Card */}
       <Row gutter={[16, 16]} className="mt-4">

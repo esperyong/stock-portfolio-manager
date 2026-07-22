@@ -1,6 +1,6 @@
 use crate::db::Database;
 use crate::models::{HoldingWithQuote, StockQuote};
-use crate::services::quote_service::{fetch_cn_quote_with_provider, fetch_hk_quote_with_provider, fetch_us_quote_with_provider, fetch_quotes_batch_cached_with_providers, save_quotes_to_db, QuoteCache, CASH_SYMBOL_PREFIX};
+use crate::services::quote_service::{fetch_cn_quote_with_provider, fetch_hk_quote_with_provider, fetch_us_quote_with_provider, fetch_quotes_batch_cached_with_providers, fetch_xueqiu_valuation_batch, save_quotes_to_db, update_valuation_metrics_in_db, QuoteCache, CASH_SYMBOL_PREFIX};
 use crate::services::quote_provider_service;
 use tauri::State;
 
@@ -115,6 +115,9 @@ pub async fn get_holding_quotes(
         .map(|h| (h.symbol.clone(), h.market.clone()))
         .collect();
 
+    // Snapshot of all holding symbols for the dividend-yield side channel
+    // (the match below moves `all_symbols` into the batch fetcher).
+    let all_symbols_for_yields = all_symbols.clone();
     let quotes = match refresh_symbols {
         Some(ref symbols) if !symbols.is_empty() => {
             // Targeted refresh: force-refresh only the specified symbols
@@ -147,6 +150,34 @@ pub async fn get_holding_quotes(
     if let Err(e) = save_quotes_to_db(&db, &quotes) {
         eprintln!("Failed to persist quotes to DB: {}", e);
     }
+
+    // Refresh valuation metrics (dividend yield TTM, PE TTM) from Xueqiu as a
+    // side channel, independent of the configured quote provider.  Only on
+    // API-refresh paths; cache-only reads skip this and reuse the last cached
+    // values.  Best-effort: a failure leaves previously cached values intact.
+    let mut quotes = quotes;
+    if should_refresh_from_api {
+        match fetch_xueqiu_valuation_batch(&all_symbols_for_yields).await {
+            Ok(metrics) => {
+                for q in quotes.iter_mut() {
+                    if let Some(m) = metrics.get(&q.symbol) {
+                        if let Some(y) = m.dividend_yield {
+                            q.dividend_yield = Some(y);
+                        }
+                        if let Some(pe) = m.pe_ttm {
+                            q.pe_ttm = Some(pe);
+                        }
+                        quote_cache.set_valuation(&q.symbol, m);
+                    }
+                }
+                if let Err(e) = update_valuation_metrics_in_db(&db, &metrics) {
+                    eprintln!("Failed to persist valuation metrics to DB: {}", e);
+                }
+            }
+            Err(e) => eprintln!("Valuation refresh failed: {}", e),
+        }
+    }
+
     let quote_map: std::collections::HashMap<String, StockQuote> = quotes
         .into_iter()
         .map(|q| (q.symbol.clone(), q))

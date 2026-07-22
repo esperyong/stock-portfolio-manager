@@ -330,6 +330,8 @@ mod tests {
                 low: 173.0,
                 volume: 50000000,
                 updated_at: "2024-01-15T16:00:00Z".to_string(),
+                dividend_yield: None,
+                pe_ttm: None,
             },
             crate::models::StockQuote {
                 symbol: "sh600519".to_string(),
@@ -343,6 +345,8 @@ mod tests {
                 low: 1785.0,
                 volume: 3000000,
                 updated_at: "2024-01-15T15:00:00Z".to_string(),
+                dividend_yield: None,
+                pe_ttm: None,
             },
         ];
 
@@ -377,6 +381,8 @@ mod tests {
             low: 173.0,
             volume: 50000000,
             updated_at: "2024-01-15T16:00:00Z".to_string(),
+            dividend_yield: None,
+            pe_ttm: None,
         };
         crate::services::quote_service::save_quotes_to_db(&db, &[quote]).unwrap();
 
@@ -393,6 +399,8 @@ mod tests {
             low: 175.0,
             volume: 60000000,
             updated_at: "2024-01-16T16:00:00Z".to_string(),
+            dividend_yield: None,
+            pe_ttm: None,
         };
         crate::services::quote_service::save_quotes_to_db(&db, &[updated_quote]).unwrap();
 
