@@ -403,7 +403,7 @@ pub async fn fetch_us_quote(symbol: &str) -> Result<StockQuote, String> {
 /// Fetch a US stock quote using the specified provider.
 pub async fn fetch_us_quote_with_provider(symbol: &str, provider: &str) -> Result<StockQuote, String> {
     match provider {
-        "eastmoney" => fetch_eastmoney_us_quote(symbol).await,
+        "eastmoney" => fetch_with_tencent_fallback(symbol, "US", || fetch_eastmoney_us_quote(symbol)).await,
         "xueqiu" => fetch_xueqiu_us_quote(symbol).await,
         _ => {
             let yahoo_symbol = to_yahoo_symbol(symbol, "US");
@@ -415,7 +415,7 @@ pub async fn fetch_us_quote_with_provider(symbol: &str, provider: &str) -> Resul
 /// Fetch a HK stock quote using the specified provider.
 pub async fn fetch_hk_quote_with_provider(symbol: &str, provider: &str) -> Result<StockQuote, String> {
     match provider {
-        "eastmoney" => fetch_eastmoney_hk_quote(symbol).await,
+        "eastmoney" => fetch_with_tencent_fallback(symbol, "HK", || fetch_eastmoney_hk_quote(symbol)).await,
         "xueqiu" => fetch_xueqiu_hk_quote(symbol).await,
         _ => {
             let yahoo_symbol = if symbol.ends_with(".HK") || symbol.ends_with(".hk") {
@@ -438,14 +438,167 @@ pub async fn fetch_cn_quote(symbol: &str) -> Result<StockQuote, String> {
 pub async fn fetch_cn_quote_with_provider(symbol: &str, provider: &str) -> Result<StockQuote, String> {
     match provider {
         "xueqiu" => fetch_xueqiu_cn_quote(symbol).await,
-        // Default to eastmoney for CN
-        _ => fetch_eastmoney_cn_quote(symbol).await,
+        // Default to eastmoney for CN, with Tencent fallback when East Money is unreachable.
+        _ => fetch_with_tencent_fallback(symbol, "CN", || fetch_eastmoney_cn_quote(symbol)).await,
     }
 }
 
 // ---------------------------------------------------------------------------
 // East Money (东方财富) API
 // ---------------------------------------------------------------------------
+
+/// Run a primary quote fetch and, on failure, fall back to the Tencent provider.
+///
+/// East Money's real-time endpoint (`push2.eastmoney.com`) is unreachable from
+/// some networks (it returns HTTP 502/503 or an empty reply while the sibling
+/// history host `push2his.eastmoney.com` works fine).  When that happens we
+/// transparently retry the same symbol via Tencent (`qt.gtimg.cn`), which is
+/// reachable from those networks and needs no authentication.  The original
+/// error is preserved in the log for diagnostics.
+async fn fetch_with_tencent_fallback<F, Fut>(
+    symbol: &str,
+    market: &str,
+    primary: F,
+) -> Result<StockQuote, String>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<StockQuote, String>>,
+{
+    match primary().await {
+        Ok(quote) => Ok(quote),
+        Err(e) => {
+            eprintln!(
+                "East Money fetch failed for {} ({}): {} — falling back to Tencent",
+                symbol, market, e
+            );
+            fetch_tencent_quote(symbol, market).await
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tencent (腾讯) quote API
+// ---------------------------------------------------------------------------
+
+/// Convert a holding symbol + market to the Tencent quote symbol.
+///
+/// Tencent uses lowercase market prefixes: `sh`/`sz` (CN), `hk` (HK, zero-padded
+/// to 5 digits), `us` (US ticker, uppercased).  Bare CN codes are normalised
+/// first via [`normalize_cn_symbol`].
+fn to_tencent_symbol(symbol: &str, market: &str) -> Result<String, String> {
+    match market {
+        "CN" => Ok(normalize_cn_symbol(symbol)),
+        "HK" => {
+            let code = symbol
+                .trim_end_matches(".HK")
+                .trim_end_matches(".hk");
+            if code.chars().all(|c| c.is_ascii_digit()) {
+                Ok(format!("hk{:0>5}", code))
+            } else {
+                Err(format!("Invalid HK symbol for Tencent: {}", symbol))
+            }
+        }
+        "US" => Ok(format!("us{}", symbol.to_uppercase().replace('-', "."))),
+        _ => Err(format!("Unsupported market '{}' for Tencent", market)),
+    }
+}
+
+/// Fetch a stock quote from Tencent (`qt.gtimg.cn`).
+///
+/// The endpoint returns GBK-encoded text of the form
+/// `v_sh600519="1~贵州茅台~600519~1305.00~1308.00~..."` where fields are
+/// separated by `~`.  Field indices (0-based): 1 = name, 2 = code, 3 = current
+/// price, 4 = previous close, 6 = volume, 31 = change, 32 = change percent,
+/// 33 = day high, 34 = day low.  An unmatched symbol yields `v_pv_none_match`.
+pub async fn fetch_tencent_quote(symbol: &str, market: &str) -> Result<StockQuote, String> {
+    let tencent_symbol = to_tencent_symbol(symbol, market)?;
+    let url = format!("https://qt.gtimg.cn/q={}", tencent_symbol);
+
+    let response = http_client::tencent_client()
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Network error fetching {} from Tencent: {}", symbol, e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Tencent API error for {}: HTTP {}",
+            symbol,
+            response.status()
+        ));
+    }
+
+    // Tencent returns GBK-encoded bytes; decode manually.
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read Tencent response body for {}: {}", symbol, e))?;
+    let (text, _, _) = encoding_rs::GBK.decode(&bytes);
+
+    parse_tencent_quote(symbol, market, &text)
+}
+
+/// Parse the raw Tencent response text into a [`StockQuote`].
+fn parse_tencent_quote(symbol: &str, market: &str, text: &str) -> Result<StockQuote, String> {
+    // Response format: `v_sh600519="1~name~code~...";`
+    // An unmatched symbol yields `v_pv_none_match="1";` — detect via the
+    // response key before splitting off the payload.
+    if text.contains("pv_none_match") {
+        return Err(format!(
+            "Tencent returned no match for {} (symbol may be invalid).",
+            symbol
+        ));
+    }
+
+    // Extract the quoted payload after the first `=`.
+    let payload = text
+        .split('=')
+        .nth(1)
+        .map(|s| s.trim())
+        .ok_or_else(|| format!("Malformed Tencent response for {}: {}", symbol, text))?;
+
+    let payload = payload.trim_matches('"').trim_end_matches(';');
+    let fields: Vec<&str> = payload.split('~').collect();
+    if fields.len() < 35 {
+        return Err(format!(
+            "Unexpected Tencent response for {}: too few fields ({}). Response: {}",
+            symbol,
+            fields.len(),
+            payload
+        ));
+    }
+
+    let name = fields[1].to_string();
+    let current_price = fields[3]
+        .parse::<f64>()
+        .map_err(|e| format!("Invalid current price in Tencent response for {}: {} ({})", symbol, fields[3], e))?;
+    let previous_close = fields[4].parse::<f64>().unwrap_or(0.0);
+    let volume = fields[6].parse::<f64>().unwrap_or(0.0) as u64;
+    let change = fields[31].parse::<f64>().unwrap_or_else(|_| current_price - previous_close);
+    let change_percent = fields[32].parse::<f64>().unwrap_or_else(|_| {
+        if previous_close != 0.0 {
+            change / previous_close * 100.0
+        } else {
+            0.0
+        }
+    });
+    let high = fields[33].parse::<f64>().unwrap_or(0.0);
+    let low = fields[34].parse::<f64>().unwrap_or(0.0);
+
+    Ok(StockQuote {
+        symbol: symbol.to_string(),
+        name,
+        market: market.to_string(),
+        current_price,
+        previous_close,
+        change,
+        change_percent,
+        high,
+        low,
+        volume,
+        updated_at: Utc::now().to_rfc3339(),
+    })
+}
 
 /// Maximum number of retry attempts for transient East Money API failures.
 const EASTMONEY_MAX_RETRIES: u32 = 2;
@@ -1876,6 +2029,50 @@ mod tests {
     fn test_normalize_cn_symbol_mixed_case() {
         assert_eq!(normalize_cn_symbol("SH600519"), "sh600519");
         assert_eq!(normalize_cn_symbol("Sz000858"), "sz000858");
+    }
+
+    #[test]
+    fn test_to_tencent_symbol_cn() {
+        assert_eq!(to_tencent_symbol("600519", "CN").unwrap(), "sh600519");
+        assert_eq!(to_tencent_symbol("sh600519", "CN").unwrap(), "sh600519");
+        assert_eq!(to_tencent_symbol("000858", "CN").unwrap(), "sz000858");
+    }
+
+    #[test]
+    fn test_to_tencent_symbol_hk() {
+        assert_eq!(to_tencent_symbol("00700", "HK").unwrap(), "hk00700");
+        assert_eq!(to_tencent_symbol("0700.HK", "HK").unwrap(), "hk00700");
+        assert_eq!(to_tencent_symbol("9988", "HK").unwrap(), "hk09988");
+    }
+
+    #[test]
+    fn test_to_tencent_symbol_us() {
+        assert_eq!(to_tencent_symbol("AAPL", "US").unwrap(), "usAAPL");
+        assert_eq!(to_tencent_symbol("brk-b", "US").unwrap(), "usBRK.B");
+    }
+
+    #[test]
+    fn test_parse_tencent_quote_cn() {
+        let text = "v_sh600519=\"1~贵州茅台~600519~1305.00~1308.00~1300.00~65181~31504~33678~1304.00~6~1303.00~8~1302.38~5~1302.36~1~1302.35~2~1305.00~28~1305.01~1~1305.17~1~1305.20~1~1305.23~5~~20260722161442~-3.00~-0.23~1308.00~1283.24~1305.00/65181/8431141766\";";
+        let q = parse_tencent_quote("sh600519", "CN", text).unwrap();
+        assert_eq!(q.symbol, "sh600519");
+        assert_eq!(q.name, "贵州茅台");
+        assert_eq!(q.market, "CN");
+        assert!((q.current_price - 1305.00).abs() < 0.001);
+        assert!((q.previous_close - 1308.00).abs() < 0.001);
+        assert!((q.change - (-3.00)).abs() < 0.001);
+        assert!((q.change_percent - (-0.23)).abs() < 0.001);
+        assert!((q.high - 1308.00).abs() < 0.001);
+        assert!((q.low - 1283.24).abs() < 0.001);
+        assert_eq!(q.volume, 65181);
+    }
+
+    #[test]
+    fn test_parse_tencent_quote_no_match() {
+        let text = "v_pv_none_match=\"1\";";
+        let result = parse_tencent_quote("sh999999", "CN", text);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("no match"));
     }
 
     #[test]

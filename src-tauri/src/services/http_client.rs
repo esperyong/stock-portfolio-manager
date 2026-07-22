@@ -20,6 +20,12 @@ static GENERAL_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 /// Global HTTP client configured specifically for the East Money API.
 static EASTMONEY_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
+/// Global HTTP client configured specifically for the Tencent (腾讯) quote API.
+/// Tencent's quote endpoint returns GBK-encoded text, so the response body is
+/// decoded manually with `encoding_rs` rather than relying on reqwest's charset
+/// handling.
+static TENCENT_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
 /// Global HTTP client configured specifically for the Xueqiu (雪球) API.
 /// Built with `cookie_store(true)` so that the `xq_a_token` session cookie
 /// obtained from the Xueqiu homepage is automatically stored and sent on
@@ -76,6 +82,39 @@ pub fn eastmoney_client() -> &'static reqwest::Client {
             .default_headers(default_headers)
             .build()
             .expect("failed to build East Money HTTP client")
+    })
+}
+
+/// Return a shared `reqwest::Client` for Tencent (腾讯) quote API requests.
+///
+/// The client is configured with browser-like default headers and a 15-second
+/// timeout.  Tencent's `qt.gtimg.cn` endpoint returns GBK-encoded text, which
+/// is decoded manually after fetching the raw bytes.
+pub fn tencent_client() -> &'static reqwest::Client {
+    TENCENT_CLIENT.get_or_init(|| {
+        let mut default_headers = header::HeaderMap::new();
+        default_headers.insert(
+            header::REFERER,
+            header::HeaderValue::from_static("https://gu.qq.com/"),
+        );
+        default_headers.insert(
+            header::ACCEPT,
+            header::HeaderValue::from_static("*/*"),
+        );
+        default_headers.insert(
+            header::USER_AGENT,
+            header::HeaderValue::from_static(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            ),
+        );
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .pool_max_idle_per_host(5)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .tcp_keepalive(Duration::from_secs(60))
+            .default_headers(default_headers)
+            .build()
+            .expect("failed to build Tencent HTTP client")
     })
 }
 
