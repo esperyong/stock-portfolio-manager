@@ -18,13 +18,13 @@ const INTERVAL_OPTIONS = [
 
 const PROVIDER_OPTIONS_US_HK = [
   { value: "yahoo", label: "Yahoo Finance" },
-  { value: "eastmoney", label: "东方财富" },
-  { value: "xueqiu", label: "雪球（默认）" },
+  { value: "eastmoney", label: "东方财富（默认）" },
+  { value: "xueqiu", label: "雪球" },
 ];
 
 const PROVIDER_OPTIONS_CN = [
-  { value: "eastmoney", label: "东方财富" },
-  { value: "xueqiu", label: "雪球（默认）" },
+  { value: "eastmoney", label: "东方财富（默认）" },
+  { value: "xueqiu", label: "雪球" },
 ];
 
 const COLOR_SCHEME_OPTIONS: { value: ColorScheme; label: string }[] = [
@@ -36,9 +36,9 @@ export default function GeneralSettings() {
   const { refreshIntervalMs, setRefreshInterval } = useQuoteStore();
   const { colorScheme, setColorScheme } = useSettingsStore();
   const [providerConfig, setProviderConfig] = useState<QuoteProviderConfig>({
-    us_provider: "xueqiu",
-    hk_provider: "xueqiu",
-    cn_provider: "xueqiu",
+    us_provider: "eastmoney",
+    hk_provider: "eastmoney",
+    cn_provider: "eastmoney",
     xueqiu_cookie: null,
     xueqiu_u: null,
     cn_adjust_sell_pay_cost: true,
