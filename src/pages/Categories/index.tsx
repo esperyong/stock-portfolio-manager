@@ -7,6 +7,7 @@ import {
   Modal,
   Form,
   Input,
+  InputNumber,
   Tag,
   Popconfirm,
   message,
@@ -184,7 +185,7 @@ export default function CategoriesPage() {
             <Input placeholder="#F97316" maxLength={7} />
           </Form.Item>
           <Form.Item name="sortOrder" label="排序顺序">
-            <Input type="number" placeholder="数字越小越靠前" />
+            <InputNumber placeholder="数字越小越靠前" style={{ width: "100%" }} />
           </Form.Item>
         </Form>
       </Modal>
