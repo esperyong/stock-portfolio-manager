@@ -13,6 +13,14 @@ pub struct StockQuote {
     pub low: f64,
     pub volume: u64,
     pub updated_at: String,
+    /// Trailing-12-month dividend yield as a percentage (e.g. 1.74 = 1.74%).
+    /// Sourced from Xueqiu's batch quote endpoint independently of the
+    /// configured quote provider.  `None` when upstream did not return a
+    /// value (e.g. non-dividend-paying stocks) or it has never been fetched.
+    pub dividend_yield: Option<f64>,
+    /// Trailing-twelve-month P/E ratio.  Negative for loss-making companies.
+    /// Sourced from the same Xueqiu batch endpoint as `dividend_yield`.
+    pub pe_ttm: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

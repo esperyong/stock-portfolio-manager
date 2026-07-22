@@ -32,6 +32,8 @@ export default function PieChart({ data, title, centerText, height = 300, curren
       trigger: "item",
       formatter: (params: { name: string; value: number; percent: number }) =>
         `${params.name}<br/>${currencyCode} ${params.value.toFixed(2)} (${params.percent}%)`,
+      textStyle: { fontSize: 16 },
+      extraCssText: "padding: 10px 14px;",
     },
     legend: hideLegend
       ? { show: false }

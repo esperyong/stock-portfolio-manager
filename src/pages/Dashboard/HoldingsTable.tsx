@@ -113,11 +113,70 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       width: 80,
     },
     {
+      title: "仓位%",
+      key: "position_pct",
+      sorter: (a, b) => a.market_value_usd - b.market_value_usd,
+      render: (_: unknown, record: HoldingDetail) => {
+        const pct = filteredTotalMvUsd > 0 ? (record.market_value_usd / filteredTotalMvUsd) * 100 : 0;
+        return `${pct.toFixed(2)}%`;
+      },
+      align: "right",
+      width: 90,
+    },
+    {
+      title: "股息率TTM",
+      dataIndex: "dividend_yield",
+      key: "dividend_yield",
+      sorter: (a, b) => {
+        // Nulls sort to the end regardless of sort direction.
+        const av = a.dividend_yield ?? -1;
+        const bv = b.dividend_yield ?? -1;
+        return av - bv;
+      },
+      render: (yieldVal: number | null) =>
+        // Xueqiu returns dividend_yield already as a percentage (e.g. 1.74 = 1.74%),
+        // so display it directly without multiplying by 100.
+        yieldVal != null ? `${yieldVal.toFixed(2)}%` : <span>-</span>,
+      align: "right",
+      width: 112,
+    },
+    {
+      title: "PE(TTM)",
+      dataIndex: "pe_ttm",
+      key: "pe_ttm",
+      sorter: (a, b) => {
+        // Nulls sort to the end regardless of sort direction.
+        const av = a.pe_ttm ?? Number.POSITIVE_INFINITY;
+        const bv = b.pe_ttm ?? Number.POSITIVE_INFINITY;
+        return av - bv;
+      },
+      render: (pe: number | null) =>
+        pe == null ? (
+          <span>-</span>
+        ) : pe < 0 ? (
+          <span>亏损</span>
+        ) : (
+          pe.toFixed(2)
+        ),
+      align: "right",
+      width: 100,
+    },
+    {
       title: "持仓数量",
       dataIndex: "shares",
       key: "shares",
       sorter: (a, b) => a.shares - b.shares,
       render: (shares: number) => shares.toLocaleString(),
+      align: "right",
+      width: 100,
+    },
+    {
+      title: "现价",
+      dataIndex: "current_price",
+      key: "current_price",
+      sorter: (a, b) => a.current_price - b.current_price,
+      render: (price: number, record: HoldingDetail) =>
+        fmtMoney(price, record.currency),
       align: "right",
       width: 100,
     },
@@ -135,16 +194,6 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       width: 90,
     },
     {
-      title: "现价",
-      dataIndex: "current_price",
-      key: "current_price",
-      sorter: (a, b) => a.current_price - b.current_price,
-      render: (price: number, record: HoldingDetail) =>
-        fmtMoney(price, record.currency),
-      align: "right",
-      width: 100,
-    },
-    {
       title: "市值",
       dataIndex: "market_value",
       key: "market_value",
@@ -154,17 +203,6 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
         fmtMoney(value, record.currency),
       align: "right",
       width: 140,
-    },
-    {
-      title: "仓位%",
-      key: "position_pct",
-      sorter: (a, b) => a.market_value_usd - b.market_value_usd,
-      render: (_: unknown, record: HoldingDetail) => {
-        const pct = filteredTotalMvUsd > 0 ? (record.market_value_usd / filteredTotalMvUsd) * 100 : 0;
-        return `${pct.toFixed(2)}%`;
-      },
-      align: "right",
-      width: 90,
     },
     {
       title: "盈亏金额",
@@ -208,7 +246,7 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       dataSource={holdings}
       rowKey="id"
       loading={loading}
-      scroll={{ x: hideAccountMarket ? 1100 : 1310 }}
+      scroll={{ x: hideAccountMarket ? 1312 : 1522 }}
       size="small"
       pagination={{ pageSize: 20, showSizeChanger: true }}
       bordered

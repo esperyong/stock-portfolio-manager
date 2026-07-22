@@ -65,6 +65,10 @@ export interface StockQuote {
   low: number;
   volume: number;
   updated_at: string;
+  /** TTM dividend yield as a percentage (e.g. 1.74 = 1.74%). Null when unavailable. */
+  dividend_yield: number | null;
+  /** TTM P/E ratio. Negative for loss-making companies. Null when unavailable. */
+  pe_ttm: number | null;
 }
 
 export interface HoldingWithQuote extends Holding {
@@ -132,6 +136,10 @@ export interface HoldingDetail {
   currency: Currency;
   /** Market value normalised to USD for cross-currency sorting. */
   market_value_usd: number;
+  /** TTM dividend yield as a percentage (e.g. 1.74 = 1.74%). Null when unavailable. */
+  dividend_yield: number | null;
+  /** TTM P/E ratio. Negative for loss-making companies. Null when unavailable. */
+  pe_ttm: number | null;
 }
 
 // Phase 3: Statistics types

@@ -116,6 +116,10 @@ pub fn run() {
                 services::quote_service::set_xueqiu_user_cookie(config.xueqiu_cookie.clone());
                 services::quote_service::set_xueqiu_user_u(config.xueqiu_u.clone());
 
+                // Snapshot of holding symbols for the dividend-yield side
+                // channel (the call below moves `symbols`).
+                let symbols_for_yields = symbols.clone();
+
                 // Force-refresh all holding quotes from the upstream API.
                 match services::quote_service::fetch_quotes_batch_cached_with_providers(
                     &cache,
@@ -130,6 +134,22 @@ pub fn run() {
                     Ok(quotes) => {
                         // Persist the freshly fetched quotes to the database.
                         let _ = services::quote_service::save_quotes_to_db(&db, &quotes);
+
+                        // Separately refresh valuation metrics (dividend yield
+                        // TTM, PE TTM) from Xueqiu, independent of the
+                        // configured quote provider.  This side channel is
+                        // best-effort: a wholesale failure leaves the
+                        // previously cached values intact.
+                        match services::quote_service::fetch_xueqiu_valuation_batch(&symbols_for_yields).await {
+                            Ok(metrics) => {
+                                for (symbol, m) in &metrics {
+                                    cache.set_valuation(symbol, m);
+                                }
+                                let _ = services::quote_service::update_valuation_metrics_in_db(&db, &metrics);
+                            }
+                            Err(e) => eprintln!("Background valuation refresh failed: {}", e),
+                        }
+
                         // Peek at any warning (without consuming it) so we can
                         // include it in the quote-warning event.  The warning stays
                         // in LAST_QUOTE_WARNING so the frontend's take_quote_warning
