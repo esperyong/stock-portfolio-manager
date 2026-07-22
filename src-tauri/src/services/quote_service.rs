@@ -683,11 +683,20 @@ struct EastMoneyData {
 /// Normalise a CN stock symbol to the `shXXXXXX` / `szXXXXXX` form.
 ///
 /// Bare numeric codes (e.g. `"600519"`) are common in the database.
-/// Shanghai exchange codes start with 6 or 9; everything else is Shenzhen.
+///
+/// Code-to-exchange mapping by leading digit:
+/// - `6` → Shanghai (A-share main board, STAR `688`); `9` → Shanghai B-share
+/// - `5` → Shanghai funds/ETF/LOF (`50`, `51`, `56`, `58` …)
+/// - `0`/`3` → Shenzhen (main board / ChiNext); `2` → Shenzhen B-share
+/// - `1` → Shenzhen funds/ETF/LOF (`15`, `16`, `18` …)
+///
+/// The previous version treated anything not starting with `6`/`9` as Shenzhen,
+/// which mis-routed Shanghai ETFs such as `513050` to Shenzhen (`sz513050`) and
+/// caused quote providers to return no match (hence no name on holding create).
 pub fn normalize_cn_symbol(symbol: &str) -> String {
     let lower = symbol.to_lowercase();
     let s = lower.trim_start_matches("sh").trim_start_matches("sz");
-    if s.starts_with('6') || s.starts_with('9') {
+    if s.starts_with('6') || s.starts_with('9') || s.starts_with('5') {
         format!("sh{}", s)
     } else {
         format!("sz{}", s)
@@ -2110,6 +2119,20 @@ mod tests {
     #[test]
     fn test_normalize_cn_symbol_bare_shenzhen() {
         assert_eq!(normalize_cn_symbol("000858"), "sz000858");
+    }
+
+    #[test]
+    fn test_normalize_cn_symbol_shanghai_etf() {
+        // Shanghai ETFs/LOFs start with 5 — previously mis-routed to Shenzhen.
+        assert_eq!(normalize_cn_symbol("513050"), "sh513050");
+        assert_eq!(normalize_cn_symbol("588000"), "sh588000");
+        assert_eq!(normalize_cn_symbol("501050"), "sh501050");
+    }
+
+    #[test]
+    fn test_normalize_cn_symbol_shenzhen_etf() {
+        assert_eq!(normalize_cn_symbol("159915"), "sz159915");
+        assert_eq!(normalize_cn_symbol("160119"), "sz160119");
     }
 
     #[test]
