@@ -524,11 +524,25 @@ struct EastMoneyData {
     f170: Option<f64>,
 }
 
+/// Normalise a CN stock symbol to the `shXXXXXX` / `szXXXXXX` form.
+///
+/// Bare numeric codes (e.g. `"600519"`) are common in the database.
+/// Shanghai exchange codes start with 6 or 9; everything else is Shenzhen.
+pub fn normalize_cn_symbol(symbol: &str) -> String {
+    let lower = symbol.to_lowercase();
+    let s = lower.trim_start_matches("sh").trim_start_matches("sz");
+    if s.starts_with('6') || s.starts_with('9') {
+        format!("sh{}", s)
+    } else {
+        format!("sz{}", s)
+    }
+}
+
 /// Fetch a CN A-share stock quote from East Money (东方财富).
 /// Symbol format: "sh600519" (Shanghai) or "sz000858" (Shenzhen).
 /// The symbol is normalised to lowercase automatically.
 async fn fetch_eastmoney_cn_quote(symbol: &str) -> Result<StockQuote, String> {
-    let symbol = symbol.to_lowercase();
+    let symbol = normalize_cn_symbol(&symbol);
     let secid = to_eastmoney_secid(&symbol)?;
     let url = format!(
         "https://push2.eastmoney.com/api/qt/stock/get?fltt=2&invt=2&fields=f43,f44,f45,f47,f58,f60,f169,f170&secid={}",
@@ -1124,7 +1138,8 @@ fn to_xueqiu_hk_symbol(symbol: &str) -> Result<String, String> {
 
 /// Fetch a CN A-share stock quote from Xueqiu (雪球).
 async fn fetch_xueqiu_cn_quote(symbol: &str) -> Result<StockQuote, String> {
-    let xueqiu_symbol = to_xueqiu_cn_symbol(symbol)?;
+    let normalized = normalize_cn_symbol(symbol);
+    let xueqiu_symbol = to_xueqiu_cn_symbol(&normalized)?;
     let url = format!(
         "https://stock.xueqiu.com/v5/stock/quote.json?symbol={}&extend=detail",
         xueqiu_symbol
@@ -1839,6 +1854,28 @@ mod tests {
         let result = parse_eastmoney_quote(&lower, "CN", resp);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().symbol, "sh600519");
+    }
+
+    #[test]
+    fn test_normalize_cn_symbol_bare_shanghai() {
+        assert_eq!(normalize_cn_symbol("600519"), "sh600519");
+    }
+
+    #[test]
+    fn test_normalize_cn_symbol_bare_shenzhen() {
+        assert_eq!(normalize_cn_symbol("000858"), "sz000858");
+    }
+
+    #[test]
+    fn test_normalize_cn_symbol_already_prefixed() {
+        assert_eq!(normalize_cn_symbol("sh600519"), "sh600519");
+        assert_eq!(normalize_cn_symbol("sz000858"), "sz000858");
+    }
+
+    #[test]
+    fn test_normalize_cn_symbol_mixed_case() {
+        assert_eq!(normalize_cn_symbol("SH600519"), "sh600519");
+        assert_eq!(normalize_cn_symbol("Sz000858"), "sz000858");
     }
 
     #[test]
