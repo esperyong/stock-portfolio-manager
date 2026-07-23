@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Row, Col, Card } from "antd";
+import { Card, Tabs } from "antd";
 import PieChart from "../../components/charts/PieChart";
 import type { DashboardSummary, ExchangeRates, HoldingDetail, PieSlice } from "../../types";
 
@@ -84,28 +84,37 @@ export default function QuickCharts({ summary, holdings }: Props) {
   }, [holdings, summary]);
 
   if (!summary) return null;
-  if (marketData.length === 0 && holdingData.length === 0) return null;
 
   const total = summary.total_market_value.toFixed(0);
   const currency = summary.base_currency;
   const centerText = `${currencySymbol[currency] ?? ""}${Number(total).toLocaleString()}`;
 
+  const TAB_EMPTY = (
+    <div style={{ textAlign: "center", color: "#999", padding: 40 }}>
+      暂无数据
+    </div>
+  );
+
+  const tabItems = [
+    {
+      key: "holding",
+      label: "持仓分布",
+      children: holdingData.length > 0 ? (
+        <PieChart data={holdingData} height={640} centerText={centerText} currencyCode={currency} />
+      ) : TAB_EMPTY,
+    },
+    {
+      key: "market",
+      label: "市场分布",
+      children: marketData.length > 0 ? (
+        <PieChart data={marketData} height={640} centerText={centerText} currencyCode={currency} />
+      ) : TAB_EMPTY,
+    },
+  ];
+
   return (
-    <Row gutter={[16, 16]} className="mt-4">
-      {marketData.length > 0 && (
-        <Col span={24}>
-          <Card title="市场分布" size="small">
-            <PieChart data={marketData} height={640} centerText={centerText} currencyCode={currency} />
-          </Card>
-        </Col>
-      )}
-      {holdingData.length > 0 && (
-        <Col span={24}>
-          <Card title="持仓分布" size="small">
-            <PieChart data={holdingData} height={640} centerText={centerText} currencyCode={currency} />
-          </Card>
-        </Col>
-      )}
-    </Row>
+    <Card className="mt-4" size="small">
+      <Tabs defaultActiveKey="holding" items={tabItems} destroyInactiveTabPane />
+    </Card>
   );
 }
