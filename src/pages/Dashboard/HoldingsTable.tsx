@@ -81,28 +81,6 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
       width: 140,
     },
     {
-      title: "账户",
-      dataIndex: "account_name",
-      key: "account_name",
-      filters: accountFilters,
-      onFilter: (value, record) => record.account_name === value,
-      ellipsis: true,
-      width: 120,
-    },
-    {
-      title: "市场",
-      dataIndex: "market",
-      key: "market",
-      render: (market: string) => marketLabel[market] ?? market,
-      filters: [
-        { text: "🇺🇸 美股", value: "US" },
-        { text: "🇨🇳 A股", value: "CN" },
-        { text: "🇭🇰 港股", value: "HK" },
-      ],
-      onFilter: (value, record) => record.market === value,
-      width: 80,
-    },
-    {
       title: "类别",
       dataIndex: "category_name",
       key: "category_name",
@@ -233,6 +211,28 @@ export default function HoldingsTable({ holdings, loading, hideAccountMarket = f
         ),
       align: "right",
       width: 100,
+    },
+    {
+      title: "账户",
+      dataIndex: "account_name",
+      key: "account_name",
+      filters: accountFilters,
+      onFilter: (value, record) => record.account_name === value,
+      ellipsis: true,
+      width: 120,
+    },
+    {
+      title: "市场",
+      dataIndex: "market",
+      key: "market",
+      render: (market: string) => marketLabel[market] ?? market,
+      filters: [
+        { text: "🇺🇸 美股", value: "US" },
+        { text: "🇨🇳 A股", value: "CN" },
+        { text: "🇭🇰 港股", value: "HK" },
+      ],
+      onFilter: (value, record) => record.market === value,
+      width: 80,
     },
     ];
     return hideAccountMarket
