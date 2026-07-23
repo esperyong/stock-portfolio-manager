@@ -30,6 +30,20 @@ Versioning: `package.json` and `src-tauri/Cargo.toml` share the version (current
 
 Do **not** add any Claude/AI attribution to commits — no `Co-Authored-By: Claude ...` trailer and no "Generated with Claude Code" line. Commit messages describe the change only.
 
+## Git Workflow & PRs
+
+When asked to create a branch, submit a PR, or clean up after a merge, follow these guidelines:
+- **Create Branch & Submit PR**:
+  - Checkout a new branch: `git checkout -b feature/<branch-name>`
+  - Stage and commit changes.
+  - Push branch to remote: `git push origin feature/<branch-name>`
+  - Create the PR via GitHub CLI: `gh pr create --title "<title>" --body "<body>" --head feature/<branch-name> --base main`. Ensure PR body and commits contain no Claude/AI attribution.
+- **Clean up after Merge**:
+  - Switch to main: `git checkout main`
+  - Sync with remote: `git pull`
+  - Safely delete the local feature branch: `git branch -d feature/<branch-name>`
+  - Delete the remote branch (if desired): `git push origin --delete feature/<branch-name>`
+
 ## Architecture
 
 ### The IPC boundary is the center of gravity
