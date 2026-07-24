@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="特变电工（600089.SH）价值投资全面分析：业务与上下游、未来1-3年自由现金流预测、现价安全边际，巴菲特/芒格框架。">
+<title>特变电工价值投资分析 · 600089.SH</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --page:#f1f0ea; --surface:#fbfaf6; --surface-2:#eae8df;
+    --ink:#1a1813; --ink-2:#565246; --muted:#8b867a;
+    --hair:#e2e0d6; --axis:#cbc8bc;
+    --accent:#0c6a5b; --accent-2:#0a5849; --accent-soft:#d7ebe6;
+    --danger:#c0433a; --danger-soft:#f5ded9; --pos:#0a7647; --pos-soft:#d9ecdf;
+    --warn:#b8791f; --warn-soft:#f4e6cf;
+    --s-profit:#0c6a5b; --s-fcf:#2a78d6;
+    --shadow:0 1px 2px rgba(20,18,12,.04), 0 8px 30px rgba(20,18,12,.05);
+    --maxw:1080px; --col:820px;
+    --f-cjk: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --page:#100f0c; --surface:#191813; --surface-2:#22201a;
+      --ink:#f3f1e9; --ink-2:#bdb9ad; --muted:#8f8a7e;
+      --hair:#2b2922; --axis:#3a382f;
+      --accent:#37b9a2; --accent-2:#4cc9b2; --accent-soft:#123832;
+      --danger:#e0685c; --danger-soft:#3a201c; --pos:#3fb57e; --pos-soft:#16301f;
+      --warn:#d69b45; --warn-soft:#332714;
+      --s-profit:#37b9a2; --s-fcf:#4f97e8;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="light"]{ color-scheme:light;
+    --page:#f1f0ea; --surface:#fbfaf6; --surface-2:#eae8df; --ink:#1a1813; --ink-2:#565246; --muted:#8b867a;
+    --hair:#e2e0d6; --axis:#cbc8bc; --danger:#c0433a; --danger-soft:#f5ded9; --pos:#0a7647; --pos-soft:#d9ecdf;
+    --warn:#b8791f; --warn-soft:#f4e6cf; --s-profit:#0c6a5b; --s-fcf:#2a78d6; --accent:#0c6a5b; --accent-soft:#d7ebe6;}
+  :root[data-theme="dark"]{ color-scheme:dark;
+    --page:#100f0c; --surface:#191813; --surface-2:#22201a; --ink:#f3f1e9; --ink-2:#bdb9ad; --muted:#8f8a7e;
+    --hair:#2b2922; --axis:#3a382f; --danger:#e0685c; --danger-soft:#3a201c; --pos:#3fb57e; --pos-soft:#16301f;
+    --warn:#d69b45; --warn-soft:#332714; --s-profit:#37b9a2; --s-fcf:#4f97e8; --accent:#37b9a2; --accent-soft:#123832;}
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:var(--f-cjk);
+    font-size:16px;line-height:1.72;letter-spacing:.01em;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:40px 24px 80px}
+  .col{max-width:var(--col);margin-inline:auto}
+  header.doc{max-width:var(--col);margin:0 auto 8px}
+  .kicker{font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  h1{font-size:clamp(26px,4.4vw,38px);line-height:1.18;margin:.35em 0 .3em;letter-spacing:-.01em}
+  .sub{color:var(--ink-2);font-size:15px;margin:0 0 4px}
+  .meta{color:var(--muted);font-size:13px;margin-top:10px;border-top:1px solid var(--hair);padding-top:12px}
+  .meta b{color:var(--ink-2);font-weight:600}
+  h2{font-size:22px;margin:2.4em 0 .2em;letter-spacing:-.01em;padding-bottom:.3em;border-bottom:2px solid var(--hair)}
+  h2 .n{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:.4em}
+  h3{font-size:16.5px;margin:1.6em 0 .3em}
+  p{margin:.7em 0}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-soft)}
+  .col > section{max-width:var(--col);margin-inline:auto}
+  .lead{font-size:16.5px;color:var(--ink-2)}
+
+  .banner{display:flex;gap:12px;align-items:flex-start;background:var(--warn-soft);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);
+    border-radius:12px;padding:13px 16px;font-size:13.5px;color:var(--ink-2);margin:18px auto 6px;max-width:var(--col)}
+  .banner .i{flex:0 0 auto;font-size:16px;line-height:1.5}
+
+  .verdict{background:var(--surface);border:1px solid var(--hair);border-left:5px solid var(--danger);
+    border-radius:14px;padding:20px 22px;margin:22px auto;box-shadow:var(--shadow);max-width:var(--col)}
+  .verdict .tag{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.06em;color:#fff;background:var(--danger);
+    padding:3px 10px;border-radius:999px;margin-bottom:8px}
+  .verdict h3{margin:.1em 0 .3em;font-size:19px}
+  .verdict p{margin:.4em 0;font-size:15px;color:var(--ink-2)}
+  .verdict b{color:var(--ink)}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;background:var(--surface);
+    border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:16px auto;max-width:var(--col)}
+  .scroll table{margin:0;min-width:560px}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--hair);vertical-align:top}
+  th{background:var(--surface-2);font-weight:600;font-size:12.5px;color:var(--ink-2);letter-spacing:.02em}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:none}
+  tr.total td{font-weight:700;background:color-mix(in srgb,var(--accent-soft) 40%,transparent)}
+  .pos{color:var(--pos);font-weight:600}
+  .neg{color:var(--danger);font-weight:600}
+  .chip{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);border:1px solid var(--hair)}
+
+  figure{margin:22px auto;max-width:var(--col)}
+  figure svg{width:100%;height:auto;display:block;background:var(--surface);border:1px solid var(--hair);border-radius:12px;padding:8px 6px}
+  figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;text-align:center}
+  .legend{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);margin:6px 0 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .swatch{width:14px;height:4px;border-radius:2px;display:inline-block}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:18px auto;max-width:var(--col)}
+  .card{background:var(--surface);border:1px solid var(--hair);border-radius:12px;padding:16px 16px 14px;box-shadow:var(--shadow)}
+  .card .h{font-weight:700;font-size:15px;margin-bottom:2px;display:flex;align-items:center;gap:8px}
+  .card p{font-size:13.5px;color:var(--ink-2);margin:.4em 0 0}
+  .rate{font-size:11.5px;font-weight:700;letter-spacing:.04em;padding:2px 8px;border-radius:999px;margin-left:auto}
+  .rate.wide{background:var(--pos-soft);color:var(--pos)}
+  .rate.mid{background:var(--warn-soft);color:var(--warn)}
+  .rate.none{background:var(--danger-soft);color:var(--danger)}
+
+  ul.tight{margin:.6em 0;padding-left:1.2em}
+  ul.tight li{margin:.4em 0}
+  .callout{background:var(--accent-soft);border-radius:10px;padding:12px 16px;font-size:14px;color:var(--ink-2);margin:16px auto;max-width:var(--col)}
+  .callout b{color:var(--ink)}
+  hr{border:none;border-top:1px solid var(--hair);margin:2.4em auto;max-width:var(--col)}
+  footer{max-width:var(--col);margin:40px auto 0;font-size:12.5px;color:var(--muted);border-top:1px solid var(--hair);padding-top:16px}
+  .toggle{position:fixed;top:14px;right:14px;background:var(--surface);border:1px solid var(--hair);color:var(--ink-2);
+    border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer;box-shadow:var(--shadow);font-family:inherit}
+  @media (max-width:560px){ body{font-size:15px} .wrap{padding:24px 16px 60px} }
+</style>
+</head>
+<body>
+<button class="toggle" onclick="(function(){var r=document.documentElement;var c=r.getAttribute('data-theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;r.setAttribute('data-theme',(c? c : (d?'dark':'light'))==='dark'?'light':'dark');})()">◐ 主题</button>
+<div class="wrap">
+
+<header class="doc">
+  <div class="kicker">价值投资 · 个股深度分析</div>
+  <h1>特变电工（600089.SH）价值投资全面分析</h1>
+  <p class="sub">业务与上下游 · 未来 1–3 年自由现金流预测 · 现价安全边际 · 巴菲特/芒格框架</p>
+  <div class="meta">
+    <b>研究时间</b> 2026-07-24 ｜ <b>标的</b> 特变电工 TBEA（600089.SH，上证 A 股）｜ <b>价格基准</b> 21.53 元（2026-07-23 收盘，低置信度）<br>
+    <b>方法</b> 多智能体研究工作流（6 路并行检索 → 现金流建模 → 双路对抗式核验）；已读年报原始 PDF、新特能源港交所业绩、多家券商研报。
+  </div>
+</header>
+
+<div class="banner">
+  <span class="i">⚠️</span>
+  <span><b>免责声明：</b>本报告为投研学习与复查用途，<b>不构成任何投资建议或买卖要约</b>。特变电工盈利受多晶硅价格剧烈摆动，价格数据为前一交易日收盘（低置信度）。请独立核实数据、自主决策。投资有风险。</span>
+</div>
+
+<div class="col">
+
+<div class="verdict">
+  <span class="tag">裁决：回避 / 持有不追高</span>
+  <h3>好生意，但现价在为"多晶硅复苏"定价——没有安全边际</h3>
+  <p>核心的<b>输变电特许权 + 低成本煤</b>是优质资产，"十五五"电网 4 万亿投资（+40%）+ 出口放量给了多年可见度。但在 <b>~21.5 元</b>：现价 ≈ 或略高于中性内在价值（<b>~16–18 元</b>），<b>无安全边际</b>；赔率不对称偏不利（上 +35% vs 下 −49%）；到 2028 年报告自由现金流仍是负到勉强转正（三年累计仅 ~+20 亿）。</p>
+  <p>巴菲特/芒格式买点在<b>中位数十几元（约 12–15 元）</b>——届时净拿输变电+煤炭盈利能力，把多晶硅周期当免费期权。<b>用别人恐惧多晶硅的时候，去买它的输变电和煤。</b></p>
+</div>
+
+<section>
+<h2><span class="n">01</span>它是做什么的</h2>
+<p class="lead">特变电工由张新在新疆创办，本质是<b>围绕新疆廉价能源 + 电力工程能力搭起来的四块业务</b>。2025 年营收 972.3 亿元（基本持平），归母净利润 59.5 亿元（+43.7%）。</p>
+<div class="callout">⚠️ <b>盈利质量提示：</b>+43.7% 有水分——扣非净利润仅 <b>45.5 亿（+15.6%）</b>，差额约 15.8 亿是华电新能上市的一次性公允价值收益；2026Q1 扣非净利甚至同比 <b>下滑约 3.8%</b>。头部增速高估了真实经营改善。</div>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>业务板块（FY2025）</th><th class="num">收入(亿元)</th><th class="num">毛利率</th><th class="num">同比</th><th>定位</th></tr></thead>
+  <tbody>
+    <tr><td>电气设备（变压器/电抗器等）</td><td class="num">267.6</td><td class="num">19.8%</td><td class="num pos">+19.7%</td><td>利润压舱石</td></tr>
+    <tr><td>电线电缆</td><td class="num">155.7</td><td class="num">8.3%</td><td class="num">~持平</td><td>低毛利配套</td></tr>
+    <tr><td>输变电成套工程（EPC）</td><td class="num">49.3</td><td class="num">15.9%</td><td class="num">~持平</td><td>打包接单</td></tr>
+    <tr class="total"><td>输变电合计</td><td class="num">≈472.5</td><td class="num">—</td><td class="num">—</td><td>约占营收 49%</td></tr>
+    <tr><td>新能源产品及工程（多晶硅+逆变器+EPC）</td><td class="num">135.6</td><td class="num neg">0.59%</td><td class="num neg">−26.9%</td><td>周期摆动项</td></tr>
+    <tr><td>煤炭</td><td class="num">169.7</td><td class="num">22.4%</td><td class="num neg">−11.9%</td><td>隐形现金牛</td></tr>
+    <tr><td>发电（煤电+风光电站）</td><td class="num">71.8</td><td class="num">54.8%</td><td class="num pos">+28.2%</td><td>自备煤→高毛利</td></tr>
+    <tr><td>黄金</td><td class="num">24.7</td><td class="num">57.2%</td><td class="num pos">+106.9%</td><td>周期性红利</td></tr>
+    <tr><td>铝材/新材料</td><td class="num">63.0</td><td class="num">9.7%</td><td class="num pos">+12.4%</td><td>小而稳</td></tr>
+  </tbody>
+</table>
+</div>
+<p style="font-size:13px;color:var(--muted)">注：各产品线合计约 782 亿，与合并营收 972 亿差额约 190 亿为贸易/其他及内部抵销。分部为估算口径，公司仅披露收入/毛利率。核心子公司 <b>新特能源（1799.HK）直接持股 64.43%</b>；合并少数股东权益高达 264.6 亿元（新特 35.57% 在外部手中）。实际控制人为自然人张新。</p>
+</section>
+
+<section>
+<h2><span class="n">02</span>盈利的本质：营收不动，利润随商品价大起大落</h2>
+<p>营收四年几乎不动（960–980 亿），净利润却在 <b>159 亿(2022)→41 亿(2024)→60 亿(2025)</b> 间剧烈摆动——波动全部来自多晶硅与煤炭价格。而<b>自由现金流已连续两年为负</b>：因为资本开支不降反升到 221 亿，公司把赚的钱几乎全部再投资。</p>
+
+<figure>
+<svg viewBox="0 0 700 370" role="img" aria-label="归母净利与自由现金流 2022-2028">
+  <!-- gridlines -->
+  <g stroke="var(--axis)" stroke-width="1" opacity=".5">
+    <line x1="48" y1="39.4" x2="688" y2="39.4"/><line x1="48" y1="87.7" x2="688" y2="87.7"/>
+    <line x1="48" y1="136.1" x2="688" y2="136.1"/><line x1="48" y1="232.9" x2="688" y2="232.9"/>
+    <line x1="48" y1="281.3" x2="688" y2="281.3"/>
+  </g>
+  <line x1="48" y1="184.5" x2="688" y2="184.5" stroke="var(--ink-2)" stroke-width="1.4"/>
+  <g fill="var(--muted)" font-size="11" text-anchor="end">
+    <text x="44" y="43">150</text><text x="44" y="91">100</text><text x="44" y="140">50</text>
+    <text x="44" y="188">0</text><text x="44" y="237">−50</text><text x="44" y="285">−100</text>
+  </g>
+  <!-- forecast divider -->
+  <line x1="402.5" y1="20" x2="402.5" y2="320" stroke="var(--axis)" stroke-width="1.2" stroke-dasharray="4 4"/>
+  <text x="410" y="32" fill="var(--muted)" font-size="10.5">预测 →</text>
+  <!-- FCF bars -->
+  <g>
+    <rect x="50" y="162.3" width="40" height="22.2" fill="var(--s-fcf)" rx="2"/>
+    <rect x="145" y="117.7" width="40" height="66.8" fill="var(--s-fcf)" rx="2"/>
+    <rect x="240" y="184.5" width="40" height="41.6" fill="var(--danger)" rx="2"/>
+    <rect x="335" y="184.5" width="40" height="122.9" fill="var(--danger)" rx="2"/>
+    <rect x="430" y="184.5" width="40" height="33.9" fill="var(--danger)" opacity=".5" rx="2"/>
+    <rect x="525" y="179.7" width="40" height="4.8" fill="var(--s-fcf)" opacity=".55" rx="2"/>
+    <rect x="620" y="136.1" width="40" height="48.4" fill="var(--s-fcf)" opacity=".55" rx="2"/>
+  </g>
+  <!-- FCF value labels -->
+  <g fill="var(--ink-2)" font-size="10.5" text-anchor="middle" font-weight="600">
+    <text x="70" y="156">+23</text><text x="165" y="111">+69</text>
+    <text x="260" y="239" fill="var(--danger)">−43</text><text x="355" y="320" fill="var(--danger)">−127</text>
+    <text x="450" y="231" fill="var(--danger)">−35</text><text x="545" y="175">+5</text><text x="640" y="130">+50</text>
+  </g>
+  <!-- net profit line: history solid -->
+  <polyline points="70,30.6 165,81.0 260,144.8 355,126.5" fill="none" stroke="var(--s-profit)" stroke-width="2.6" stroke-linejoin="round"/>
+  <polyline points="355,126.5 450,126.5 545,118.7 640,111.0" fill="none" stroke="var(--s-profit)" stroke-width="2.6" stroke-dasharray="6 5" stroke-linejoin="round"/>
+  <g fill="var(--s-profit)">
+    <circle cx="70" cy="30.6" r="4"/><circle cx="165" cy="81.0" r="4"/><circle cx="260" cy="144.8" r="4"/><circle cx="355" cy="126.5" r="4"/>
+    <circle cx="450" cy="126.5" r="3.4" fill="var(--surface)" stroke="var(--s-profit)" stroke-width="2"/>
+    <circle cx="545" cy="118.7" r="3.4" fill="var(--surface)" stroke="var(--s-profit)" stroke-width="2"/>
+    <circle cx="640" cy="111.0" r="3.4" fill="var(--surface)" stroke="var(--s-profit)" stroke-width="2"/>
+  </g>
+  <g fill="var(--s-profit)" font-size="10.5" text-anchor="middle" font-weight="700">
+    <text x="70" y="24">159</text><text x="182" y="76">107</text><text x="260" y="160">41</text><text x="355" y="120">60</text>
+    <text x="450" y="120">60E</text><text x="545" y="112">68E</text><text x="640" y="104">76E</text>
+  </g>
+  <!-- x labels -->
+  <g fill="var(--ink-2)" font-size="11.5" text-anchor="middle">
+    <text x="70" y="338">2022</text><text x="165" y="338">2023</text><text x="260" y="338">2024</text><text x="355" y="338">2025</text>
+    <text x="450" y="338">2026E</text><text x="545" y="338">2027E</text><text x="640" y="338">2028E</text>
+  </g>
+  <text x="368" y="360" fill="var(--muted)" font-size="11" text-anchor="middle">单位：亿元人民币 · 2026–2028 为中性情形预测</text>
+</svg>
+<div class="legend">
+  <span><span class="dot" style="background:var(--s-profit)"></span>归母净利润（折线）</span>
+  <span><span class="swatch" style="background:var(--s-fcf)"></span>自由现金流（正）</span>
+  <span><span class="swatch" style="background:var(--danger)"></span>自由现金流（负）</span>
+</div>
+<figcaption>净利润在恢复，自由现金流却因 221 亿资本开支而深度为负——这是本案最核心的一张图。</figcaption>
+</figure>
+</section>
+
+<section>
+<h2><span class="n">03</span>上下游产业链</h2>
+<div class="cards">
+  <div class="card"><div class="h">🔌 输变电（利润引擎）</div>
+    <p><b>上游：</b>取向硅钢（外购，宝钢/首钢主导，属成本风险）、铜、铝（期货套保）。<b>下游：</b>国网/南网、特高压、出口。换流变压器国内第一（~34%）。<b>增量：</b>沙特 164 亿大单、国际签约 20 亿美元(+68%)、海外订单 >50 亿美元。</p></div>
+  <div class="card"><div class="h">☀️ 多晶硅/新能源</div>
+    <p><b>上游：</b>工业硅 + 电力（占成本 41.5%，故自备电厂是关键）。<b>下游：</b>硅片/光伏，纯商品、严重过剩。2025 产量 −51.5%、利用率仅 37%。特变现金成本 ~3 万/吨，有竞争力但非行业最低。</p></div>
+  <div class="card"><div class="h">⛏️ 煤炭 + 发电（一体化根基）</div>
+    <p>准东煤田储量 126 亿吨、产能 7,400 万吨（申请核增至 1.64 亿吨）。<b>开采成本仅 66–100 元/吨 vs 全国 150–200</b>，自有 5,040MW 煤电。自有廉价煤 → 便宜电 → 低成本硅/铝，是护城河来源。</p></div>
+  <div class="card"><div class="h">🧪 新材料（铝）</div>
+    <p>能源 → 氧化铝 → 高纯铝 → 电子铝箔 → 电极箔（下游铝电解电容器）。稳定但利润占比小。</p></div>
+</div>
+</section>
+
+<section>
+<h2><span class="n">04</span>未来 1–3 年自由现金流预测（2026–2028）</h2>
+<p>报告口径自由现金流（经营现金流 − 资本开支，亿元）。资本开支仍在高位是 FCF 迟迟难以转正的主因。</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>年份</th><th class="num">悲观</th><th class="num">中性</th><th class="num">乐观</th><th>核心驱动</th></tr></thead>
+  <tbody>
+    <tr><td>2026</td><td class="num neg">−90</td><td class="num neg">−35</td><td class="num pos">+25</td><td>输变电强+沙特放量；多晶硅约盈亏平衡；资本开支仍 190 亿高位</td></tr>
+    <tr><td>2027</td><td class="num neg">−55</td><td class="num pos">+5</td><td class="num pos">+90</td><td>沙特 164 亿执行、出口占比 ~30%；资本开支降至 180 亿，FCF 首次转正</td></tr>
+    <tr><td>2028</td><td class="num neg">−15</td><td class="num pos">+50</td><td class="num pos">+135</td><td>建设期基本结束、资本开支回落 155 亿，FCF 才真正有意义</td></tr>
+    <tr class="total"><td>三年累计（中性）</td><td class="num">—</td><td class="num">≈+20</td><td class="num">—</td><td>即便基准兑现，股东可见自由现金依然微薄</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout"><b>关键结论：</b>公司持续每年砸 100–130 亿增长性资本开支（相当部分投向"无护城河"的多晶硅扩产）。<b>你买的不是打折的自由现金流，而是一个仍在重资本投入期的半商品综合体。</b>我的归母净利中性预测 60/68/76 亿，低于券商共识 74/90/107–125 亿（我按多晶硅盈亏平衡建模，共识把周期反转当基准）。</div>
+</section>
+
+<section>
+<h2><span class="n">05</span>内在价值与安全边际</h2>
+<p>股东盈余 DCF（股权成本 11–12%，归一化盈余锚 48–52 亿）与分部估值(SOTP)交叉验证。经对抗式核验，原模型两处偏差（折现率偏低、归一化偏高）已下修，均把内在价值推向更低。</p>
+
+<figure>
+<svg viewBox="0 0 700 150" role="img" aria-label="估值区间与现价">
+  <!-- axis -->
+  <line x1="60" y1="96" x2="660" y2="96" stroke="var(--axis)" stroke-width="1.4"/>
+  <g fill="var(--muted)" font-size="10.5" text-anchor="middle">
+    <text x="60" y="118">8</text><text x="171" y="118">13</text><text x="282" y="118">18</text><text x="393" y="118">23</text><text x="504" y="118">28</text><text x="615" y="118">33</text>
+    <text x="368" y="140" fill="var(--muted)">每股价格（元）</text>
+  </g>
+  <!-- bands -->
+  <rect x="148.9" y="70" width="66.7" height="26" fill="var(--pos)" opacity=".22" rx="4"/>
+  <text x="182" y="64" fill="var(--pos)" font-size="11" text-anchor="middle" font-weight="700">买入区 12–15</text>
+  <rect x="237.8" y="70" width="44.4" height="26" fill="var(--accent)" opacity=".28" rx="4"/>
+  <text x="260" y="64" fill="var(--accent)" font-size="11" text-anchor="middle" font-weight="700">中性 16–18</text>
+  <rect x="504.4" y="70" width="111.2" height="26" fill="var(--warn)" opacity=".2" rx="4"/>
+  <text x="560" y="64" fill="var(--warn)" font-size="11" text-anchor="middle" font-weight="700">乐观 28–33</text>
+  <!-- bear tick -->
+  <line x1="126.7" y1="70" x2="126.7" y2="96" stroke="var(--danger)" stroke-width="2.4"/>
+  <text x="126.7" y="112" fill="var(--danger)" font-size="10.5" text-anchor="middle">悲观 11</text>
+  <!-- current price marker -->
+  <line x1="360" y1="42" x2="360" y2="104" stroke="var(--danger)" stroke-width="2.6"/>
+  <polygon points="360,38 353,28 367,28" fill="var(--danger)"/>
+  <text x="360" y="22" fill="var(--danger)" font-size="12" text-anchor="middle" font-weight="800">现价 21.5</text>
+</svg>
+<figcaption>现价 21.5 元落在中性内在价值（16–18）之上、买入区（12–15）右侧——无安全边际。券商目标价 29.6–33 元几乎就是乐观情景。</figcaption>
+</figure>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>情形</th><th class="num">每股内在价值</th><th class="num">相对现价 21.5 元</th></tr></thead>
+  <tbody>
+    <tr><td>悲观</td><td class="num">~11 元</td><td class="num neg">−49%</td></tr>
+    <tr class="total"><td>中性（修正后）</td><td class="num">~16–18 元</td><td class="num neg">约 −20%～−25%（现价偏贵）</td></tr>
+    <tr><td>乐观</td><td class="num">~28–33 元</td><td class="num pos">+30%～+50%</td></tr>
+  </tbody>
+</table>
+</div>
+<p style="font-size:13px;color:var(--muted)">现价对应静态 PE 约 18 倍、扣非 PE 约 24 倍。~21.5 元还是从 52 周低点 11.4 元反弹上来的——几个月前存在的安全边际已被这波上涨吃掉。</p>
+</section>
+
+<section>
+<h2><span class="n">06</span>巴菲特—芒格框架评估</h2>
+<div class="cards">
+  <div class="card"><div class="h">护城河 <span class="rate mid">混合</span></div>
+    <p>🟢 <b>宽护城河：</b>输变电是真特许权（换流变压器国内第一、全产业链、绑定两网、出口领先）——电网建设与全球电气化的"收费站"。<br>🟡 <b>成本资产：</b>准东低成本煤，好资产但周期性。<br>🔴 <b>无护城河：</b>多晶硅纯商品、严重过剩，成本仅二线，一体化可复制——下行期的价值毁灭者。</p></div>
+  <div class="card"><div class="h">管理层 <span class="rate mid">尚可</span></div>
+    <p>🟢 创始人控制、长期导向；建成输变电特许权与低成本煤；主动减产控产显示纪律。<br>🔴 逆周期扩张多晶硅 +26 万吨（投过剩）；连续两年 FCF 深度为负、负债升至 499 亿；利润被一次性收益美化。分红温和波动（股息率 ~1.7%）。<b>非"回报导向"画像。</b></p></div>
+  <div class="card"><div class="h">能力圈 <span class="rate none">太难</span></div>
+    <p>单看输变电/煤矿可理解；但合并盈利被极难预测的多晶硅价格主导（300→34 元/公斤，净利 159→41→60 亿）。叠加四板块、港股子公司、大额少数股东、一次性损益——<b>正常化盈余极难锚定，芒格大概率"放进太难堆"。</b></p></div>
+  <div class="card"><div class="h">价格 <span class="rate none">无边际</span></div>
+    <p>现价 21.5 元 ≥ 中性内在价值 16–18 元。不满足"以合理价买优秀公司"。合理买点在中位数十几元（12–15 元，约 30% 折让）。</p></div>
+</div>
+</section>
+
+<section>
+<h2><span class="n">07</span>主要风险</h2>
+<ul class="tight">
+  <li><b>多晶硅价格再度探底：</b>2026 年中 N 型料 ~33 元/公斤已跌回现金成本附近，若"反内卷"供改落空，新特重回亏损甚至减值（2024 曾计提 34 亿）。</li>
+  <li><b>自由现金流长期为负 + 负债上升：</b>FCF −43(2024)/−127(2025)；有息负债 499 亿且在增。悲观情形三年累计"烧钱" ~160 亿，有真实资产负债表压力。</li>
+  <li><b>盈利质量：</b>2025 高增长靠一次性收益，2026Q1 扣非已负增长。</li>
+  <li><b>综合体复杂性 / 大额少数股东：</b>264.6 亿少数股东权益、港股子公司、频繁重述，正常化盈余难估。</li>
+  <li><b>政策与执行：</b>电网投资政策性、有波动；沙特订单仅 ~70% 锁定、需本地建厂，有执行/汇率/地缘风险。</li>
+  <li><b>煤炭周期 + 能源转型：</b>煤炭毛利已从 32% 降至 22%，逆风侵蚀成本优势。</li>
+</ul>
+</section>
+
+<section>
+<h2><span class="n">08</span>数据与置信度说明</h2>
+<ul class="tight">
+  <li>FY2025 核心财务（营收 972.3 / 归母 59.5 / 经营现金流 93.3 / 资本开支 221 / FCF ≈ −127 亿、股本 5.05 亿股、市值 ~1,080 亿）经<b>独立对抗式核验确认</b>，无"亿/万"单位混淆。</li>
+  <li>一处已修正：夹带资料曾把新特持股写成 76%，<b>正确为 64.43%</b>（模型已用正确值，不影响估值）。</li>
+  <li><b>较低置信度：</b>2026-07-23 收盘价 21.53 元及当日涨幅无法用一手行情源独立确认（7 月成交价验证在 20 出头区间，故合理）；新特港股市值未纳入 SOTP（用账面估算）。</li>
+  <li>估值模型经核验下修两处（折现率改用股权成本、归一化盈余下调），两者均把内在价值推低，<b>强化而非削弱"回避"结论</b>。</li>
+</ul>
+<div class="callout">📌 <b>后续待办：</b>新特能源（1799.HK）单独深挖——判断"直接买港股子公司 vs 买母公司"哪个更划算（应用户要求，后续单独进行）。</div>
+</section>
+
+</div><!-- /col -->
+
+<footer>
+  免责声明：本报告基于截至 2026-07-24 的公开信息，采用多智能体研究工作流生成并经对抗式核验，仅供投研学习与复查，<b>不构成任何投资建议或买卖要约</b>。投资有风险，决策需自行独立判断并核实数据。<br>
+  特变电工（600089.SH）· 价值投资个股分析 · 生成于 2026-07-24
+</footer>
+
+</div><!-- /wrap -->
+</body>
+</html>
